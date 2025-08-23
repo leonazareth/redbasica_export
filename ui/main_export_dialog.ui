@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainExportDialog</class>
+ <widget class="QDialog" name="MainExportDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Flexible Sewerage Network DXF Export</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="layerSelectionGroup">
+     <property name="title">
+      <string>Layer Selection</string>
+     </property>
+     <layout class="QFormLayout" name="layerFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="pipesLayerLabel">
+        <property name="text">
+         <string>Pipes Layer:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="pipesLayerLayout">
+        <item>
+         <widget class="QgsMapLayerComboBox" name="pipesLayerCombo">
+          <property name="toolTip">
+           <string>Select any line layer containing pipe/conduit data</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="configurePipesButton">
+          <property name="text">
+           <string>Configure Fields...</string>
+          </property>
+          <property name="toolTip">
+           <string>Configure attribute mapping for pipes layer</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="junctionsLayerLabel">
+        <property name="text">
+         <string>Junctions Layer:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="junctionsLayerLayout">
+        <item>
+         <widget class="QgsMapLayerComboBox" name="junctionsLayerCombo">
+          <property name="toolTip">
+           <string>Select any point layer containing junction/manhole data</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="configureJunctionsButton">
+          <property name="text">
+           <string>Configure Fields...</string>
+          </property>
+          <property name="toolTip">
+           <string>Configure attribute mapping for junctions layer</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="exportOptionsGroup">
+     <property name="title">
+      <string>Export Options</string>
+     </property>
+     <layout class="QFormLayout" name="exportFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="outputPathLabel">
+        <property name="text">
+         <string>Output File:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="outputPathLayout">
+        <item>
+         <widget class="QLineEdit" name="outputPathEdit">
+          <property name="toolTip">
+           <string>Path where the DXF file will be saved</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseOutputButton">
+          <property name="text">
+           <string>Browse...</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="scaleFactorLabel">
+        <property name="text">
+         <string>Scale Factor:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QSpinBox" name="scaleFactorSpinBox">
+        <property name="minimum">
+         <number>100</number>
+        </property>
+        <property name="maximum">
+         <number>50000</number>
+        </property>
+        <property name="singleStep">
+         <number>100</number>
+        </property>
+        <property name="value">
+         <number>2000</number>
+        </property>
+        <property name="toolTip">
+         <string>Scale factor for text and symbol sizing</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="layerPrefixLabel">
+        <property name="text">
+         <string>Layer Prefix:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="layerPrefixEdit">
+        <property name="text">
+         <string>ESG_</string>
+        </property>
+        <property name="toolTip">
+         <string>Prefix for DXF layer names</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="templatePathLabel">
+        <property name="text">
+         <string>Template File:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <layout class="QHBoxLayout" name="templatePathLayout">
+        <item>
+         <widget class="QLineEdit" name="templatePathEdit">
+          <property name="toolTip">
+           <string>Optional DXF template file (leave empty for default)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseTemplateButton">
+          <property name="text">
+           <string>Browse...</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="advancedOptionsGroup">
+     <property name="title">
+      <string>Advanced Options</string>
+     </property>
+     <layout class="QVBoxLayout" name="advancedVerticalLayout">
+      <item>
+       <widget class="QCheckBox" name="includeArrowsCheckBox">
+        <property name="text">
+         <string>Include flow direction arrows</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Add directional arrows on pipe segments longer than 20 scale units</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="includeLabelsCheckBox">
+        <property name="text">
+         <string>Include pipe labels (ID, length-diameter-slope)</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Add pipe ID labels above pipes and data labels below pipes</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="includeElevationsCheckBox">
+        <property name="text">
+         <string>Include elevation data and 3D coordinates</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Include 3D coordinates and manhole elevation blocks</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QFormLayout" name="labelFormatLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelFormatLabel">
+          <property name="text">
+           <string>Label Format:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLineEdit" name="labelFormatEdit">
+          <property name="text">
+           <string>{length:.0f}-{diameter:.0f}-{slope:.5f}</string>
+          </property>
+          <property name="toolTip">
+           <string>Format string for pipe data labels (use {field_name} placeholders)</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="validationGroup">
+     <property name="title">
+      <string>Validation Status</string>
+     </property>
+     <layout class="QVBoxLayout" name="validationVerticalLayout">
+      <item>
+       <widget class="QTextEdit" name="validationTextEdit">
+        <property name="maximumHeight">
+         <number>100</number>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Real-time validation feedback for current configuration</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="previewGroup">
+     <property name="title">
+      <string>Export Preview</string>
+     </property>
+     <layout class="QVBoxLayout" name="previewVerticalLayout">
+      <item>
+       <widget class="QLabel" name="previewLabel">
+        <property name="text">
+         <string>Click 'Preview Export' to see what will be exported</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="previewButton">
+        <property name="text">
+         <string>Preview Export</string>
+        </property>
+        <property name="toolTip">
+         <string>Generate export preview without creating the DXF file</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QgsMapLayerComboBox</class>
+   <extends>QComboBox</extends>
+   <header>qgis.gui</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>MainExportDialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>MainExportDialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

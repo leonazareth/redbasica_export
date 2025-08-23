@@ -1,0 +1,89 @@
+# RedBasica Export Plugin Metadata
+# Flexible DXF Export for Sewerage Network Designs
+
+[general]
+name=RedBasica Export - Flexible Sewerage DXF Export
+qgisMinimumVersion=3.16
+qgisMaximumVersion=3.99
+description=Professional DXF export for sewerage networks with flexible layer selection and intelligent field mapping
+version=1.0.0
+author=Leonardo Nazareth
+email=leonazareth@gmail.com
+
+about=Professional-grade DXF export plugin for sewerage network designs in QGIS. This plugin revolutionizes sewerage network export by providing complete flexibility in layer selection and field mapping. Unlike traditional plugins that require hardcoded layer names ('PIPES', 'JUNCTIONS') and specific field structures, RedBasica Export allows users to select ANY layers from their QGIS project and map ANY field names to required sewerage network attributes.
+
+    Key Features:
+    • Universal Layer Support: Works with any layer names and structures
+    • Intelligent Field Mapping: Auto-suggests mappings based on common patterns (QEsg, generic, multilingual)
+    • Robust Data Conversion: Handles string numbers, NULL values, Portuguese decimals automatically
+    • Professional DXF Output: Organized layers, blocks, arrows, labels, and 3D elevations
+    • Self-Contained: Bundled ezdxf library - no external dependencies required
+    • Multilingual Support: Portuguese and English interfaces with extensible translation system
+    • QEsg Compatible: Maintains same high-quality output as original QEsg plugin
+    • Comprehensive Validation: Real-time validation with detailed error reporting
+    • Configuration Persistence: Remembers settings for quick repeated exports
+
+    Perfect for engineers, designers, and CAD professionals working with diverse sewerage network data structures.
+
+tracker=https://github.com/leonazareth/redbasica_export/issues
+repository=https://github.com/leonazareth/redbasica_export
+
+# Recommended items:
+hasProcessingProvider=no
+
+# Changelog
+changelog=
+    1.0.0 - Initial Professional Release
+    ========================
+    Core Features:
+    • Universal layer selection - works with ANY layer names and structures
+    • Intelligent field mapping with auto-suggestion for common patterns
+    • Robust data type conversion system (string numbers, NULL handling, Portuguese decimals)
+    • Professional DXF output with organized layers and styling
+    • Self-contained operation with bundled ezdxf library
+    
+    User Interface:
+    • Intuitive main export dialog with real-time validation
+    • Comprehensive attribute mapping interface with preview
+    • Layer selector with filtering and sample data display
+    • Configuration persistence and template management
+    
+    Technical Capabilities:
+    • 3D geometry support with elevation handling
+    • Flow arrows and comprehensive labeling system
+    • Extended entity data (XDATA) for CAD software compatibility
+    • Template-based export with QEsg template integration
+    • Comprehensive error handling and recovery
+    
+    Quality Assurance:
+    • Extensive unit and integration test coverage
+    • Multilingual support (Portuguese/English)
+    • Professional documentation and examples
+    • Validated against AutoCAD and other CAD software
+
+# Tags are comma separated with spaces allowed
+tags=dxf,export,sewerage,sanitation,cad,autocad,network,flexible,mapping,engineering,qesg,professional,3d,elevation
+
+homepage=https://github.com/leonazareth/redbasica_export
+category=Vector
+icon=icon.png
+
+# Experimental flag
+experimental=False
+
+# Deprecated flag
+deprecated=False
+
+# Plugin dependencies - All libraries bundled, no external dependencies required
+plugin_dependencies=
+
+# Bundled Libraries (included in addon/ directory)
+# - ezdxf >= 1.0.0 (DXF creation and manipulation)
+# - c3d (3D geometry support - optional)
+
+# If the plugin can run on QGIS Server
+server=False
+
+# Minimum Python version
+pythonMinimumVersion=3.7
+

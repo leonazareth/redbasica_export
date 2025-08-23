@@ -1,0 +1,116 @@
+{
+  "name": "Standard Sewerage Export",
+  "description": "Standard configuration for most sewerage network exports with balanced detail and performance",
+  "version": "1.0.0",
+  "configuration": {
+    "output_path": "",
+    "scale_factor": 2000,
+    "layer_prefix": "ESG_",
+    "template_path": null,
+    "include_arrows": true,
+    "include_labels": true,
+    "include_elevations": true,
+    "label_format": "{length:.0f}-{diameter:.0f}-{slope:.5f}",
+    "pipes_mapping": {
+      "layer_id": "",
+      "layer_name": "",
+      "geometry_type": "LineString",
+      "field_mappings": {
+        "pipe_id": "DC_ID",
+        "upstream_node": "PVM",
+        "downstream_node": "PVJ",
+        "length": "LENGTH",
+        "diameter": "DIAMETER",
+        "upstream_invert": "CCM",
+        "downstream_invert": "CCJ",
+        "upstream_ground": "CTM",
+        "downstream_ground": "CTJ",
+        "slope": "DECL",
+        "material": "MATERIAL"
+      },
+      "default_values": {
+        "material": "PVC",
+        "slope": "0.001"
+      },
+      "calculated_fields": {
+        "slope": "auto_calculate_from_inverts"
+      },
+      "is_valid": false,
+      "validation_errors": [],
+      "auto_mapped_fields": {}
+    },
+    "junctions_mapping": {
+      "layer_id": "",
+      "layer_name": "",
+      "geometry_type": "Point",
+      "field_mappings": {
+        "node_id": "DC_ID",
+        "ground_elevation": "ground",
+        "invert_elevation": "invert"
+      },
+      "default_values": {
+        "ground_elevation": "0.0",
+        "invert_elevation": "0.0"
+      },
+      "calculated_fields": {},
+      "is_valid": false,
+      "validation_errors": [],
+      "auto_mapped_fields": {}
+    }
+  },
+  "field_suggestions": {
+    "pipe_id": ["DC_ID", "id", "pipe_id", "segment_id", "codigo", "identificador"],
+    "upstream_node": ["PVM", "upstream", "from_node", "start_node", "no_montante", "inicio"],
+    "downstream_node": ["PVJ", "downstream", "to_node", "end_node", "no_jusante", "fim"],
+    "length": ["LENGTH", "length", "comprimento", "len", "distance", "extensao"],
+    "diameter": ["DIAMETER", "diameter", "diam", "dn", "diametro", "bitola"],
+    "upstream_invert": ["CCM", "up_invert", "invert_up", "cota_montante", "cota_inicial"],
+    "downstream_invert": ["CCJ", "down_invert", "invert_down", "cota_jusante", "cota_final"],
+    "upstream_ground": ["CTM", "up_ground", "ground_up", "terreno_montante", "terreno_inicial"],
+    "downstream_ground": ["CTJ", "down_ground", "ground_down", "terreno_jusante", "terreno_final"],
+    "slope": ["DECL", "slope", "declividade", "i", "inclinacao", "gradiente"],
+    "material": ["MATERIAL", "material", "mat", "tipo", "pipe_material"],
+    "node_id": ["DC_ID", "id", "node_id", "pv_id", "manhole_id", "poco"],
+    "ground_elevation": ["ground", "surface", "cota_tn", "elevation", "terreno"],
+    "invert_elevation": ["invert", "cota_fundo", "bottom", "fundo"]
+  },
+  "export_options": {
+    "dxf_version": "R2018",
+    "coordinate_precision": 3,
+    "elevation_precision": 3,
+    "text_height": 2.5,
+    "arrow_size": 5.0,
+    "minimum_arrow_spacing": 20.0,
+    "label_offset": 3.0,
+    "manhole_symbol_size": 2.0
+  },
+  "layer_definitions": [
+    {"name": "REDE", "color": 172, "description": "Sewage pipes/network"},
+    {"name": "NUMERO", "color": 3, "description": "Pipe ID labels"},
+    {"name": "TEXTO", "color": 3, "description": "Pipe data labels"},
+    {"name": "TEXTOPVS", "color": 7, "description": "Manhole elevation data"},
+    {"name": "PV", "color": 3, "description": "Manholes/junctions"},
+    {"name": "NUMPV", "color": 3, "description": "Manhole ID labels"},
+    {"name": "SETA", "color": 172, "description": "Flow direction arrows"},
+    {"name": "NO", "color": 3, "description": "Dry point symbols"},
+    {"name": "AUX", "color": 241, "description": "Auxiliary elements"},
+    {"name": "LIDER", "color": 2, "description": "Leader lines"}
+  ],
+  "validation_rules": {
+    "required_pipe_fields": ["pipe_id", "upstream_node", "downstream_node", "length", "diameter"],
+    "required_junction_fields": ["node_id"],
+    "minimum_pipe_length": 0.1,
+    "maximum_pipe_length": 1000.0,
+    "minimum_diameter": 100,
+    "maximum_diameter": 2000,
+    "minimum_slope": 0.0001,
+    "maximum_slope": 0.5
+  },
+  "notes": [
+    "This configuration works well for most sewerage network projects",
+    "Adjust scale_factor based on your drawing requirements",
+    "Enable/disable arrows, labels, and elevations as needed",
+    "Field mappings can be customized for your data structure",
+    "Default values are used when fields are not mapped or contain NULL values"
+  ]
+}

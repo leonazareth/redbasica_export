@@ -1,0 +1,142 @@
+{
+  "name": "QEsg Compatible Field Mappings",
+  "description": "Field mappings compatible with original QEsg plugin structure",
+  "version": "1.0.0",
+  "pipe_mappings": {
+    "pipe_id": "DC_ID",
+    "upstream_node": "PVM",
+    "downstream_node": "PVJ",
+    "length": "LENGTH",
+    "diameter": "DIAMETER",
+    "upstream_invert": "CCM",
+    "downstream_invert": "CCJ",
+    "upstream_ground": "CTM",
+    "downstream_ground": "CTJ",
+    "slope": "DECL",
+    "material": "MATERIAL",
+    "notes": "OBS"
+  },
+  "junction_mappings": {
+    "node_id": "DC_ID",
+    "ground_elevation": "CT",
+    "invert_elevation": "CF"
+  },
+  "default_values": {
+    "material": "PVC",
+    "slope": "0.001",
+    "ground_elevation": "0.0",
+    "invert_elevation": "0.0"
+  },
+  "calculated_fields": {
+    "slope": {
+      "formula": "(upstream_invert - downstream_invert) / length",
+      "condition": "if upstream_invert and downstream_invert and length > 0"
+    },
+    "upstream_depth": {
+      "formula": "upstream_ground - upstream_invert",
+      "condition": "if upstream_ground and upstream_invert"
+    },
+    "downstream_depth": {
+      "formula": "downstream_ground - downstream_invert", 
+      "condition": "if downstream_ground and downstream_invert"
+    }
+  },
+  "field_patterns": {
+    "pipe_id": ["DC_ID", "CODIGO", "ID", "PIPE_ID"],
+    "upstream_node": ["PVM", "NO_MONTANTE", "FROM_NODE", "INICIO"],
+    "downstream_node": ["PVJ", "NO_JUSANTE", "TO_NODE", "FIM"],
+    "length": ["LENGTH", "COMPRIMENTO", "EXTENSAO", "LEN"],
+    "diameter": ["DIAMETER", "DIAMETRO", "DN", "BITOLA"],
+    "upstream_invert": ["CCM", "COTA_MONTANTE", "UP_INVERT", "COTA_INICIAL"],
+    "downstream_invert": ["CCJ", "COTA_JUSANTE", "DOWN_INVERT", "COTA_FINAL"],
+    "upstream_ground": ["CTM", "TERRENO_MONTANTE", "UP_GROUND", "SUPERFICIE_INICIAL"],
+    "downstream_ground": ["CTJ", "TERRENO_JUSANTE", "DOWN_GROUND", "SUPERFICIE_FINAL"],
+    "slope": ["DECL", "DECLIVIDADE", "SLOPE", "INCLINACAO"],
+    "material": ["MATERIAL", "MAT", "TIPO", "PIPE_MATERIAL"],
+    "node_id": ["DC_ID", "CODIGO", "ID", "NODE_ID", "PV_ID"],
+    "ground_elevation": ["CT", "COTA_TERRENO", "GROUND", "SUPERFICIE"],
+    "invert_elevation": ["CF", "COTA_FUNDO", "INVERT", "FUNDO"]
+  },
+  "data_types": {
+    "pipe_id": "String",
+    "upstream_node": "String", 
+    "downstream_node": "String",
+    "length": "Double",
+    "diameter": "Double",
+    "upstream_invert": "Double",
+    "downstream_invert": "Double",
+    "upstream_ground": "Double",
+    "downstream_ground": "Double",
+    "slope": "Double",
+    "material": "String",
+    "notes": "String",
+    "node_id": "String",
+    "ground_elevation": "Double",
+    "invert_elevation": "Double"
+  },
+  "validation_rules": {
+    "pipe_id": {
+      "required": true,
+      "unique": true,
+      "max_length": 50
+    },
+    "upstream_node": {
+      "required": true,
+      "max_length": 50
+    },
+    "downstream_node": {
+      "required": true,
+      "max_length": 50
+    },
+    "length": {
+      "required": true,
+      "min_value": 0.1,
+      "max_value": 1000.0
+    },
+    "diameter": {
+      "required": true,
+      "min_value": 100,
+      "max_value": 2000
+    },
+    "upstream_invert": {
+      "required": true,
+      "numeric": true
+    },
+    "downstream_invert": {
+      "required": true,
+      "numeric": true
+    },
+    "slope": {
+      "min_value": 0.0001,
+      "max_value": 0.5
+    },
+    "node_id": {
+      "required": true,
+      "unique": true,
+      "max_length": 50
+    }
+  },
+  "layer_requirements": {
+    "pipes": {
+      "geometry_type": "LineString",
+      "required_fields": ["pipe_id", "upstream_node", "downstream_node", "length", "diameter"],
+      "optional_fields": ["upstream_invert", "downstream_invert", "slope", "material", "notes"]
+    },
+    "junctions": {
+      "geometry_type": "Point",
+      "required_fields": ["node_id"],
+      "optional_fields": ["ground_elevation", "invert_elevation"]
+    }
+  },
+  "conversion_notes": {
+    "decimal_separator": "Handles both dot (.) and comma (,) decimal separators",
+    "null_handling": "NULL values converted to appropriate defaults (0 for numbers, empty string for text)",
+    "string_numbers": "String representations of numbers automatically converted",
+    "units": "Length in meters, diameter in millimeters, elevations in project units"
+  },
+  "compatibility": {
+    "qesg_version": "Compatible with QEsg plugin field structure",
+    "autocad_version": "Compatible with AutoCAD 2018 and later",
+    "qgis_version": "Requires QGIS 3.16 or later"
+  }
+}

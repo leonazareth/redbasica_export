@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AttributeMapperDialog</class>
+ <widget class="QDialog" name="AttributeMapperDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Attribute Field Mapping</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="layerInfoGroup">
+     <property name="title">
+      <string>Layer Information</string>
+     </property>
+     <layout class="QFormLayout" name="layerInfoLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="layerNameLabel">
+        <property name="text">
+         <string>Layer:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="layerNameValueLabel">
+        <property name="text">
+         <string>-</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="geometryTypeLabel">
+        <property name="text">
+         <string>Geometry Type:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="geometryTypeValueLabel">
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="fieldCountLabel">
+        <property name="text">
+         <string>Available Fields:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="fieldCountValueLabel">
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="mappingActionsGroup">
+     <property name="title">
+      <string>Mapping Actions</string>
+     </property>
+     <layout class="QHBoxLayout" name="mappingActionsLayout">
+      <item>
+       <widget class="QPushButton" name="autoMapButton">
+        <property name="text">
+         <string>Auto-Map Fields</string>
+        </property>
+        <property name="toolTip">
+         <string>Automatically suggest field mappings based on common naming patterns</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="clearMappingButton">
+        <property name="text">
+         <string>Clear All Mappings</string>
+        </property>
+        <property name="toolTip">
+         <string>Clear all current field mappings</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="mappingActionsSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="validateMappingButton">
+        <property name="text">
+         <string>Validate Mapping</string>
+        </property>
+        <property name="toolTip">
+         <string>Check if current mapping is complete and valid</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="mappingTabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="requiredFieldsTab">
+      <attribute name="title">
+       <string>Required Fields</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="requiredFieldsLayout">
+       <item>
+        <widget class="QLabel" name="requiredFieldsInfoLabel">
+         <property name="text">
+          <string>Map the required fields for sewerage network export. These fields must be mapped or have default values.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="requiredFieldsTable">
+         <property name="toolTip">
+          <string>Required field mappings - these must be configured for export</string>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectRows</enum>
+         </property>
+         <property name="sortingEnabled">
+          <bool>false</bool>
+         </property>
+         <column>
+          <property name="text">
+           <string>Required Field</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Description</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Layer Field</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Default Value</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Status</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="optionalFieldsTab">
+      <attribute name="title">
+       <string>Optional Fields</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="optionalFieldsLayout">
+       <item>
+        <widget class="QLabel" name="optionalFieldsInfoLabel">
+         <property name="text">
+          <string>Map optional fields to enhance the DXF export with additional information. These fields are not required but can improve the output quality.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="optionalFieldsTable">
+         <property name="toolTip">
+          <string>Optional field mappings - these enhance the export but are not required</string>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectRows</enum>
+         </property>
+         <property name="sortingEnabled">
+          <bool>false</bool>
+         </property>
+         <column>
+          <property name="text">
+           <string>Optional Field</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Description</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Layer Field</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Default Value</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Status</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="validationGroup">
+     <property name="title">
+      <string>Mapping Validation</string>
+     </property>
+     <layout class="QVBoxLayout" name="validationLayout">
+      <item>
+       <widget class="QTextEdit" name="validationTextEdit">
+        <property name="maximumHeight">
+         <number>100</number>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Real-time validation feedback for current field mapping</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>AttributeMapperDialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>AttributeMapperDialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

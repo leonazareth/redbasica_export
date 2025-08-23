@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RedBasicaExportDockWidgetBase</class>
+ <widget class="QDockWidget" name="RedBasicaExportDockWidgetBase">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>280</width>
+    <height>400</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Sewerage Network Export</string>
+  </property>
+  <widget class="QWidget" name="dockWidgetContents">
+   <layout class="QVBoxLayout" name="mainLayout">
+    <item>
+     <widget class="QGroupBox" name="layerSelectionGroup">
+      <property name="title">
+       <string>Layer Selection</string>
+      </property>
+      <layout class="QFormLayout" name="layerFormLayout">
+       <item row="0" column="0">
+        <widget class="QLabel" name="pipesLabel">
+         <property name="text">
+          <string>Pipes Layer:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QgsMapLayerComboBox" name="pipesLayerCombo">
+         <property name="toolTip">
+          <string>Select line layer containing pipe/conduit data</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="junctionsLabel">
+         <property name="text">
+          <string>Junctions Layer:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QgsMapLayerComboBox" name="junctionsLayerCombo">
+         <property name="toolTip">
+          <string>Select point layer containing junction/manhole data</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="quickActionsGroup">
+      <property name="title">
+       <string>Quick Actions</string>
+      </property>
+      <layout class="QVBoxLayout" name="quickActionsLayout">
+       <item>
+        <widget class="QPushButton" name="openExportDialogButton">
+         <property name="text">
+          <string>Configure Export...</string>
+         </property>
+         <property name="toolTip">
+          <string>Open the main export configuration dialog</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="quickExportButton">
+         <property name="text">
+          <string>Quick Export</string>
+         </property>
+         <property name="toolTip">
+          <string>Export with last used settings</string>
+         </property>
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="statusGroup">
+      <property name="title">
+       <string>Status</string>
+      </property>
+      <layout class="QVBoxLayout" name="statusLayout">
+       <item>
+        <widget class="QLabel" name="statusLabel">
+         <property name="text">
+          <string>Ready</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QProgressBar" name="progressBar">
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="layerInfoGroup">
+      <property name="title">
+       <string>Layer Information</string>
+      </property>
+      <layout class="QVBoxLayout" name="layerInfoLayout">
+       <item>
+        <widget class="QTextEdit" name="layerInfoText">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>100</height>
+          </size>
+         </property>
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+         <property name="html">
+          <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+p, li { white-space: pre-wrap; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:8pt; color:#666666;&quot;&gt;Select layers to see information&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <spacer name="verticalSpacer">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>40</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QgsMapLayerComboBox</class>
+   <extends>QComboBox</extends>
+   <header>qgis.gui</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
