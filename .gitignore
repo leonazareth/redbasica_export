@@ -30,6 +30,8 @@ MANIFEST
 *.swp
 *.swo
 *~
+.kiro/
+.cursor/
 
 # OS
 .DS_Store
@@ -53,3 +55,6 @@ test_*.py
 # Debug files
 fix_*.py
 debug_*.py
+
+# Task and implementation files
+TASK_*.md
