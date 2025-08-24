@@ -65,3 +65,8 @@ TASK_*.md
 # Reference materials and examples
 QEsg/
 examples/
+
+# Compilation files and guides
+COMPILATION_GUIDE.md
+compile_resources.bat
+*.bat
