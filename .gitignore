@@ -61,3 +61,7 @@ debug_*.py
 development/
 tools/
 TASK_*.md
+
+# Reference materials and examples
+QEsg/
+examples/
