@@ -6,7 +6,7 @@ name=RedBasica Export - Flexible Sewerage DXF Export
 qgisMinimumVersion=3.16
 qgisMaximumVersion=3.99
 description=Professional DXF export for sewerage networks with flexible layer selection and intelligent field mapping
-version=1.0.0
+version=0.5.0
 author=Leonardo Nazareth
 email=leonazareth@gmail.com
 
@@ -33,7 +33,7 @@ hasProcessingProvider=no
 
 # Changelog
 changelog=
-    1.0.0 - Initial Professional Release
+    0.5.0 - Beta Release
     ========================
     Core Features:
     • Universal layer selection - works with ANY layer names and structures
@@ -69,7 +69,7 @@ category=Vector
 icon=icon_2.png
 
 # Experimental flag
-experimental=False
+experimental=True
 
 # Deprecated flag
 deprecated=False
