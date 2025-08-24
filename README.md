@@ -2,16 +2,16 @@
 
 DXF Exporter plugin for sewerage network designs in QGIS with complete flexibility in layer selection and field mapping.
 
-## 🌟 Inspiration & Attribution
+## Inspiration & Attribution
 
 This plugin draws inspiration from the excellent **QEsg export to DXF functionality** developed by Jorge Almerio.
 
 **Original QEsg Project**: https://github.com/jorgealmerio/QEsg
 
-> 💝 **Support Open Source Development**  
-> If you find RedBasica Export or QEsg useful for your work, please consider supporting the original QEsg author through donations. Your contribution helps maintain and improve these valuable tools for the QGIS community.
+💝 **Support Open Source Development**  
+If you find RedBasica Export or QEsg useful for your work, please consider supporting the original QEsg author through donations. Your contribution helps maintain and improve these valuable tools for the QGIS community.
 
-## 🎯 Key Features
+## Key Features
 
 ### Universal Compatibility
 - Works with **ANY** layer names (not restricted to 'PIPES'/'JUNCTIONS')
@@ -21,7 +21,7 @@ This plugin draws inspiration from the excellent **QEsg export to DXF functional
 - Auto-suggests field mappings based on common patterns
 - Allows completely manual mapping when needed
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Install Plugin**: Available in QGIS Plugin Repository
 2. **Load Your Data**: Any sewerage network layers with any field names
@@ -30,13 +30,13 @@ This plugin draws inspiration from the excellent **QEsg export to DXF functional
 5. **Map Fields**: Auto-mapping suggests field assignments
 6. **Export**: Generate professional DXF output
 
-## 📋 Requirements
+## Requirements
 
 - QGIS 3.16 or later
 - Python 3.7 or later (included with QGIS)
 - No external dependencies (all libraries bundled)
 
-## 📦 Installation
+## Installation
 
 ### From QGIS Plugin Repository (Recommended)
 1. Open QGIS → **Plugins** → **Manage and Install Plugins**
@@ -51,11 +51,11 @@ This plugin draws inspiration from the excellent **QEsg export to DXF functional
 See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
 
-## 📄 License
+## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Based on QEsg plugin architecture
 - Uses ezdxf library for DXF processing
@@ -64,7 +64,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 - **Email**: leonazareth@gmail.com
 
-## 🔄 Version History
+## Version History
 
 ### v0.5.0 - Beta Release
 - Universal layer selection and field mapping
