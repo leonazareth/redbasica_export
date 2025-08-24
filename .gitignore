@@ -49,6 +49,7 @@ Thumbs.db
 *.temp
 
 # Test files
+tests/
 test_*.py
 *_test.py
 
@@ -56,5 +57,7 @@ test_*.py
 fix_*.py
 debug_*.py
 
-# Task and implementation files
+# Development and task files
+development/
+tools/
 TASK_*.md
