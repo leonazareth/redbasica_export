@@ -1493,7 +1493,7 @@ class DXFExporter:
                 dxfattribs={
                     'rotation': rot,
                     'style': 'ROMANS',
-                    'color': 7,
+                    'color': 256,
                     'layer': f"{config.layer_prefix}NUMERO"
                 }
             ).set_placement(text_pos, align=TextEntityAlignment.BOTTOM_CENTER)
@@ -1523,7 +1523,7 @@ class DXFExporter:
                 dxfattribs={
                     'rotation': rot,
                     'style': 'ROMANS', 
-                    'color': 7,
+                    'color': 256,
                     'layer': f"{config.layer_prefix}TEXTO"
                 }
             ).set_placement(data_pos, align=TextEntityAlignment.TOP_CENTER)
@@ -1543,29 +1543,8 @@ class DXFExporter:
             print(f"DEBUG: point: {point}")
             print(f"DEBUG: feature_data: {feature_data}")
             
-            # QEsg-style junction text positioning
-            sc = config.scale_factor / 2000.0
-            text_height = 3 * sc
-            text_pos = (point[0] + 3 * sc, point[1] + 3 * sc)
-            
-            node_id = feature_data.get('node_id', 'Unknown')
-            print(f"DEBUG: node_id: {node_id}")
-            print(f"DEBUG: Adding junction text: '{node_id}' to layer: {config.layer_prefix}NUMPV")
-            print(f"DEBUG: QEsg-style junction text - sc: {sc}, height: {text_height}, pos: {text_pos}")
-            
-            from ezdxf.enums import TextEntityAlignment
-            junction_text = msp.add_text(
-                node_id,
-                height=text_height,
-                dxfattribs={
-                    'rotation': 0,
-                    'width': 0.8,
-                    'style': 'ROMANS',
-                    'color': 1,
-                    'layer': f"{config.layer_prefix}NUMPV"
-                }
-            ).set_placement(text_pos, align=TextEntityAlignment.BOTTOM_LEFT)
-            print(f"DEBUG: Junction text added successfully")
+            # Skip individual manhole ID label since it's now included in the h-ID block
+            print(f"DEBUG: Skipping individual manhole ID label - now included in detailed labels")
             
             # Add detailed manhole data labels (QEsg style)
             self._add_manhole_data_labels(msp, point, feature_data, config)
@@ -1625,7 +1604,7 @@ class DXFExporter:
                     arrow_block = msp.doc.blocks.new(name=arrow_block_name)
                     arrow_block.add_solid(
                         [(4*sc, 0), (-4*sc, -1.33*sc), (-4*sc, 1.33*sc)],
-                        dxfattribs={'color': 7, 'layer': arrow_block_name}
+                        dxfattribs={'color': 256, 'layer': arrow_block_name}
                     )
                     print(f"DEBUG: Created arrow block: {arrow_block_name}")
                 
@@ -1740,109 +1719,118 @@ class DXFExporter:
         return QgsPointXY(x, y)
     
     def _add_manhole_data_labels(self, msp, point, feature_data: Dict[str, Any], config: ExportConfiguration):
-        """Add detailed manhole data labels with connection lines (QEsg style)."""
+        """Add manhole data labels with two-segment leader and left/right layout."""
         try:
             print(f"DEBUG: _add_manhole_data_labels ENTRY")
             
             sc = config.scale_factor / 2000.0
-            text_height = 2.5 * sc  # Slightly smaller for data labels
+            text_height = 2.5 * sc
+            line_spacing = 1.4 * text_height  # Increased vertical spacing between CT and CF
+            gap = 0.4 * text_height           # Gap between left and right blocks
             
             # Get manhole data
             ground_elev = feature_data.get('ground_elevation', 0)
             invert_elev = feature_data.get('invert_elevation', 0)  
-            depth = feature_data.get('depth', ground_elev - invert_elev if ground_elev and invert_elev else 0)
+            calculated_depth = ground_elev - invert_elev if ground_elev and invert_elev else 0
+            node_id = feature_data.get('node_id', 'Unknown')
             
-            if ground_elev or invert_elev or depth:
-                # Calculate label position offset from junction
-                label_offset_x = 10.0 * sc
-                label_offset_y = 8.0 * sc
+            if not (ground_elev or invert_elev):
+                return
                 
-                # Position label to the right and slightly up from junction
-                label_x = point[0] + label_offset_x
-                label_y = point[1] + label_offset_y
+            # Compose strings exactly as specified
+            ct_str = f"CT: {ground_elev:.3f}" if ground_elev else ""
+            cf_str = f"CF: {invert_elev:.3f}" if invert_elev else ""
+            right_str = f"{calculated_depth:.3f} - {node_id}" if calculated_depth and node_id != 'Unknown' else ""
+            
+            print(f"DEBUG: Labels - CT: '{ct_str}', CF: '{cf_str}', Right: '{right_str}'")
+            
+            # Calculate text widths using 0.93 factor for accurate measurement
+            char_width = text_height * 0.93  # Use 0.93 factor for precise width
+            w_ct = len(ct_str) * char_width if ct_str else 0
+            w_cf = len(cf_str) * char_width if cf_str else 0
+            left_block_w = max(w_ct, w_cf)  # Width of widest line in left block
+            
+            print(f"DEBUG: Text widths - CT: {w_ct}, CF: {w_cf}, left_block_w: {left_block_w}")
+            
+            # Position labels (adjusted for proper alignment)
+            label_offset_x = 15.0 * sc - 7.82  # Adjust 7.82 units left
+            label_offset_y = 4.0 * sc + 1.35   # Adjust 1.35 units up
+            x_label = point[0] + label_offset_x
+            y_label = point[1] + label_offset_y  # Top line baseline (CT position)
+            
+            from ezdxf.enums import TextEntityAlignment
+            
+            # Draw left block (CT and CF stacked with proper spacing)
+            y_CT = y_label  # CT baseline
+            y_CF = y_label - line_spacing  # CF baseline (1.2 * text_height below CT)
+            
+            if ct_str:
+                msp.add_text(
+                    ct_str,
+                    height=text_height,
+                    dxfattribs={
+                        'rotation': 0,
+                        'style': 'ROMANS',
+                        'color': 1,
+                        'layer': f"{config.layer_prefix}TEXTOPVS"
+                    }
+                ).set_placement((x_label, y_CT), align=TextEntityAlignment.MIDDLE_LEFT)
+                print(f"DEBUG: Added CT label: {ct_str} at ({x_label}, {y_CT})")
+            
+            if cf_str:
+                msp.add_text(
+                    cf_str,
+                    height=text_height,
+                    dxfattribs={
+                        'rotation': 0,
+                        'style': 'ROMANS',
+                        'color': 1,
+                        'layer': f"{config.layer_prefix}TEXTOPVS"
+                    }
+                ).set_placement((x_label, y_CF), align=TextEntityAlignment.MIDDLE_LEFT)
+                print(f"DEBUG: Added CF label: {cf_str} at ({x_label}, {y_CF})")
+            
+            # Draw right block (h - id inline) center-aligned between CT and CF
+            if right_str:
+                # Position at end of horizontal leader line (center between CT and CF)
+                x_right = x_label + left_block_w  # Start exactly where horizontal line ends
+                y_right = (y_CT + y_CF) / 2  # Center between CT and CF baselines
                 
-                # Add connection line from junction to label area
-                from qgis.core import QgsPointXY
-                line_start = QgsPointXY(point[0] + 3 * sc, point[1] + 3 * sc)
-                line_end = QgsPointXY(label_x - 2 * sc, label_y - 3 * sc)
-                
-                msp.add_line(
-                    (line_start.x(), line_start.y(), 0),
-                    (line_end.x(), line_end.y(), 0),
-                    dxfattribs={'layer': f"{config.layer_prefix}LIDER", 'color': 1}
-                )
-                print(f"DEBUG: Added connection line from junction to data labels")
-                
-                # Add individual data labels with proper spacing
-                line_spacing = 4.0 * sc  # Increased spacing to prevent overlap
-                current_y = label_y
-                
-                from ezdxf.enums import TextEntityAlignment
-                
-                # Add CT (ground elevation)
-                if ground_elev:
-                    ground_text = f"CT: {ground_elev:.3f}"
-                    msp.add_text(
-                        ground_text,
-                        height=text_height,
-                        dxfattribs={
-                            'rotation': 0,
-                            'style': 'ROMANS',
-                            'color': 1,
-                            'layer': f"{config.layer_prefix}TEXTOPVS"
-                        }
-                    ).set_placement((label_x, current_y), align=TextEntityAlignment.MIDDLE_LEFT)
-                    current_y -= line_spacing
-                    print(f"DEBUG: Added ground elevation label: {ground_text}")
-                
-                # Add CF (invert elevation)
-                if invert_elev:
-                    invert_text = f"CF: {invert_elev:.3f}"
-                    msp.add_text(
-                        invert_text,
-                        height=text_height,
-                        dxfattribs={
-                            'rotation': 0,
-                            'style': 'ROMANS',
-                            'color': 1,
-                            'layer': f"{config.layer_prefix}TEXTOPVS"
-                        }
-                    ).set_placement((label_x, current_y), align=TextEntityAlignment.MIDDLE_LEFT)
-                    current_y -= line_spacing
-                    print(f"DEBUG: Added invert elevation label: {invert_text}")
-                
-                # Add h: (depth calculation CT-CF)
-                if ground_elev and invert_elev:
-                    calculated_depth = ground_elev - invert_elev
-                    depth_text = f"h: {calculated_depth:.3f}"
-                    msp.add_text(
-                        depth_text,
-                        height=text_height,
-                        dxfattribs={
-                            'rotation': 0,
-                            'style': 'ROMANS',
-                            'color': 1,
-                            'layer': f"{config.layer_prefix}TEXTOPVS"
-                        }
-                    ).set_placement((label_x, current_y), align=TextEntityAlignment.MIDDLE_LEFT)
-                    current_y -= line_spacing
-                    print(f"DEBUG: Added calculated depth label: {depth_text}")
-                
-                # Add manhole ID at the bottom
-                node_id = feature_data.get('node_id', 'Unknown')
-                if node_id and node_id != 'Unknown':
-                    id_text = f"ID: {node_id}"
-                    msp.add_text(
-                        id_text,
-                        height=text_height,
-                        dxfattribs={
-                            'rotation': 0,
-                            'style': 'ROMANS',
-                            'color': 1,
-                            'layer': f"{config.layer_prefix}TEXTOPVS"
-                        }
-                    ).set_placement((label_x, current_y), align=TextEntityAlignment.MIDDLE_LEFT)
-                    print(f"DEBUG: Added manhole ID label: {id_text}")
+                msp.add_text(
+                    right_str,
+                    height=text_height,
+                    dxfattribs={
+                        'rotation': 0,
+                        'style': 'ROMANS',
+                        'color': 1,
+                        'layer': f"{config.layer_prefix}TEXTOPVS"
+                    }
+                ).set_placement((x_right, y_right), align=TextEntityAlignment.MIDDLE_LEFT)
+                print(f"DEBUG: Added right block: {right_str} at ({x_right}, {y_right})")
+            
+            # Create two-segment leader with correct elbow positioning
+            # Target point T (manhole center)
+            T = (point[0], point[1], 0)
+            
+            # Elbow point E - inclined 30° toward label
+            import math
+            leader_length = 8.0 * sc
+            angle_rad = math.radians(30)  # 30° inclined segment
+            E_x = point[0] + leader_length * math.cos(angle_rad)
+            
+            # Elbow Y = midpoint between CT and CF baselines
+            elbow_y = (y_CT + y_CF) / 2
+            E = (E_x, elbow_y, 0)
+            
+            # Landing point L - horizontal segment ends at right edge of left block
+            L_x = x_label + left_block_w
+            L = (L_x, elbow_y, 0)
+            
+            # Draw two-segment leader
+            msp.add_line(T, E, dxfattribs={'layer': f"{config.layer_prefix}LIDER", 'color': 1})
+            msp.add_line(E, L, dxfattribs={'layer': f"{config.layer_prefix}LIDER", 'color': 1})
+            
+            print(f"DEBUG: Added two-segment leader from {T} to {E} to {L}")
                 
         except Exception as e:
             print(f"DEBUG: Error in _add_manhole_data_labels: {e}")

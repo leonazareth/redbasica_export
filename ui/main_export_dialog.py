@@ -207,6 +207,9 @@ class MainExportDialog(QDialog, FORM_CLASS):
         # Show dialog
         if self.pipes_mapper_dialog.exec_() == QDialog.Accepted:
             self.pipes_mapping = self.pipes_mapper_dialog.get_mapping()
+            # Save configuration immediately to persist mappings
+            config = self.get_export_configuration()
+            self.configuration.current_config = config
             self._update_validation()
     
     def _configure_junctions_mapping(self):
@@ -237,6 +240,9 @@ class MainExportDialog(QDialog, FORM_CLASS):
         # Show dialog
         if self.junctions_mapper_dialog.exec_() == QDialog.Accepted:
             self.junctions_mapping = self.junctions_mapper_dialog.get_mapping()
+            # Save configuration immediately to persist mappings
+            config = self.get_export_configuration()
+            self.configuration.current_config = config
             self._update_validation()
     
     def _browse_output_file(self):

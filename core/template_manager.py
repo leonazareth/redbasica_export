@@ -35,13 +35,13 @@ class TemplateManager:
     
     # Standard QEsg-compatible layer definitions
     LAYER_DEFINITIONS = [
-        ('REDE', 172, 'Sewage pipes/network'),           # Main pipe network
-        ('NUMERO', 3, 'Pipe ID labels'),                 # Pipe identification numbers
-        ('TEXTO', 3, 'Pipe data labels'),                # Length-diameter-slope labels
-        ('TEXTOPVS', 7, 'Manhole elevation data'),       # Manhole elevation blocks
-        ('PV', 3, 'Manholes/junctions'),                 # Manhole symbols (circles)
-        ('NUMPV', 3, 'Manhole ID labels'),               # Manhole identification
-        ('SETA', 172, 'Flow direction arrows'),          # Flow direction indicators
+        ('REDE', 5, 'Sewage pipes/network'),             # Main pipe network - BLUE
+        ('NUMERO', 7, 'Pipe ID labels'),                 # Pipe identification numbers - WHITE
+        ('TEXTO', 7, 'Pipe data labels'),                # Length-diameter-slope labels - WHITE
+        ('TEXTOPVS', 1, 'Manhole elevation data'),       # Manhole elevation blocks - RED
+        ('PV', 1, 'Manholes/junctions'),                 # Manhole symbols (circles) - RED
+        ('NUMPV', 1, 'Manhole ID labels'),               # Manhole identification - RED
+        ('SETA', 7, 'Flow direction arrows'),            # Flow direction indicators - WHITE
         ('NO', 3, 'Dry point symbols'),                  # Perpendicular lines for dry points
         ('AUX', 241, 'Auxiliary elements'),              # Helper geometry
         ('LIDER', 2, 'Leader lines'),                    # Connection lines
