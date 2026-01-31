@@ -276,13 +276,15 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 return
             
             # Prompt for output file
-            last_output = self.configuration.get_setting('last_output_path', '')
-            if last_output:
-                default_path = last_output
+            project = QgsProject.instance()
+            project_path = project.fileName()
+            
+            if project_path:
+                default_path = os.path.splitext(project_path)[0] + ".dxf"
             else:
-                project = QgsProject.instance()
-                if project.fileName():
-                    default_path = os.path.splitext(project.fileName())[0] + "_export.dxf"
+                last_output = self.configuration.get_setting('last_output_path', '')
+                if last_output:
+                    default_path = last_output
                 else:
                     default_path = os.path.expanduser("~/sewerage_export.dxf")
             

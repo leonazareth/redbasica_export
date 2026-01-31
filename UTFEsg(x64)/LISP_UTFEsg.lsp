@@ -1,0 +1,16 @@
+(DEFUN C:CCC()
+	(command "vbaunload" "C:/UTFEsg/UTFEsg.dvb") 
+	(command "-vbaload" "C:/UTFEsg/UTFEsg.dvb") 
+	(COMMAND "-VBARUN" "UTFESG")
+)
+
+(DEFUN C:TTT()
+	(COMMAND "-VBARUN" "TRA")
+)
+(DEFUN C:DDD()
+	(COMMAND "-VBARUN" "DDD")
+)
+(DEFUN C:UTFESG()
+	(COMMAND "-VBARUN" "UTFESG")
+)
+

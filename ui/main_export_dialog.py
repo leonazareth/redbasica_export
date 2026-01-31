@@ -435,10 +435,20 @@ class MainExportDialog(QDialog, FORM_CLASS):
                 self.configuration.get_setting('label_format', '{length:.0f}-{diameter:.0f}-{slope:.5f}')
             )
             
-            # Load last output path
-            last_output = self.configuration.get_setting('last_output_path', '')
-            if last_output:
-                self.outputPathEdit.setText(last_output)
+            # Load output path - prioritize current project path
+            project = QgsProject.instance()
+            project_path = project.fileName()
+            
+            if project_path:
+                # Default to [Project Directory]/[Project Name].dxf
+                base_name = os.path.splitext(os.path.basename(project_path))[0]
+                default_path = os.path.join(os.path.dirname(project_path), f"{base_name}.dxf")
+                self.outputPathEdit.setText(default_path)
+            else:
+                # Fallback to last output path if project is not saved
+                last_output = self.configuration.get_setting('last_output_path', '')
+                if last_output:
+                    self.outputPathEdit.setText(last_output)
             
         except Exception as e:
             # If loading fails, use defaults
