@@ -66,7 +66,7 @@ tags=dxf,export,sewerage,sanitation,cad,autocad,network,flexible,mapping,enginee
 
 homepage=https://github.com/leonazareth/redbasica_export
 category=Vector
-icon=icon_2.png
+icon=icon.png
 
 # Experimental flag
 experimental=True

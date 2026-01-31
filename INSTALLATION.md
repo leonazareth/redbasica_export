@@ -18,33 +18,9 @@ RedBasica Export is a self-contained QGIS plugin that requires no external depen
 - **Memory**: 2 GB RAM or more for large datasets
 - **Disk Space**: 100 MB for plugin, examples, and working files
 
-## Installation Methods
+## Installation
 
-### Method 1: QGIS Plugin Repository (Recommended)
-
-This is the easiest installation method for most users.
-
-1. **Open QGIS**
-2. **Access Plugin Manager**:
-   - Go to **Plugins** → **Manage and Install Plugins**
-   - Or press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
-
-3. **Search for Plugin**:
-   - Click on the **All** tab
-   - In the search box, type "RedBasica Export"
-   - The plugin should appear in the results
-
-4. **Install Plugin**:
-   - Click on "RedBasica Export" in the results
-   - Click **Install Plugin** button
-   - Wait for installation to complete
-
-5. **Verify Installation**:
-   - The plugin should appear in the **Installed** tab
-   - Look for the RedBasica Export icon in the toolbar
-   - Check **Plugins** menu for "RedBasica Export" entry
-
-### Method 2: Manual Installation from ZIP
+### Method 1: Installation from ZIP
 
 Use this method if installing from a downloaded ZIP file or for development versions.
 
@@ -64,7 +40,7 @@ Use this method if installing from a downloaded ZIP file or for development vers
    - Check that installation completed successfully
    - Look for the plugin in the toolbar and menus
 
-### Method 3: Manual Installation to Plugin Directory
+### Method 2: Manual Installation to Plugin Directory
 
 For advanced users or custom installations.
 
@@ -154,7 +130,7 @@ The plugin includes all necessary dependencies, but you can verify they're worki
 
 1. **Launch Plugin**:
    - Click the RedBasica Export icon in toolbar
-   - Or go to **Plugins** → **RedBasica Export** → **Export Sewerage Network**
+   - Or go to **Vector** → **RedBasica Export** → **Export Sewerage Network**
 
 2. **Check Initial Settings**:
    - Plugin should open without errors

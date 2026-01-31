@@ -155,7 +155,10 @@ class RedBasicaExport:
         :rtype: QAction
         """
 
-        icon = QIcon(icon_path)
+        if isinstance(icon_path, QIcon):
+            icon = icon_path
+        else:
+            icon = QIcon(icon_path)
         action = QAction(icon, text, parent)
         action.triggered.connect(callback)
         action.setEnabled(enabled_flag)
@@ -182,17 +185,20 @@ class RedBasicaExport:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/redbasica_export/icon_2.png'
+        icon_path = ':/plugins/redbasica_export/icon.png'
         # Force icon cache refresh by explicitly creating QIcon
-        from qgis.PyQt.QtGui import QIcon
+        from qgis.PyQt.QtGui import QIcon, QPixmap
         icon = QIcon(icon_path)
-        if icon.isNull():
+        
+        # Check if icon is valid and has actual pixmap data
+        if icon.isNull() or icon.pixmap(16, 16).isNull():
             # Fallback to file system path if resource doesn't work
             import os
-            fallback_path = os.path.join(os.path.dirname(__file__), 'icon_2.png')
-            icon_path = fallback_path
+            fallback_path = os.path.join(os.path.dirname(__file__), 'icon.png')
+            icon = QIcon(fallback_path)
+        
         self.add_action(
-            icon_path,
+            icon,
             text=tr('Flexible Sewerage DXF Export'),
             callback=self.run,
             parent=self.iface.mainWindow())

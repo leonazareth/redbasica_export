@@ -196,8 +196,8 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.pipes_mapper_dialog.configure_for_layer(
             layer=layer,
             geometry_type=GeometryType.LINE,
-            required_fields=SewageNetworkFields.PIPES_REQUIRED,
-            optional_fields=SewageNetworkFields.PIPES_OPTIONAL
+            required_fields=SewageNetworkFields.get_pipes_required_fields(),
+            optional_fields=SewageNetworkFields.get_pipes_optional_fields()
         )
         
         # Set existing mapping if available
@@ -229,8 +229,8 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.junctions_mapper_dialog.configure_for_layer(
             layer=layer,
             geometry_type=GeometryType.POINT,
-            required_fields=SewageNetworkFields.JUNCTIONS_REQUIRED,
-            optional_fields=SewageNetworkFields.JUNCTIONS_OPTIONAL
+            required_fields=SewageNetworkFields.get_junctions_required_fields(),
+            optional_fields=SewageNetworkFields.get_junctions_optional_fields()
         )
         
         # Set existing mapping if available
@@ -566,175 +566,7 @@ class MainExportDialog(QDialog, FORM_CLASS):
         
         # Configure export button
         self.buttonBox.button(self.buttonBox.Ok).setEnabled(False)
-    
-    def _connect_signals(self):
-        """Connect UI signals to handlers."""
-        # Layer selection changes
-        self.pipesLayerCombo.layerChanged.connect(self._on_pipes_layer_changed)
-        self.junctionsLayerCombo.layerChanged.connect(self._on_junctions_layer_changed)
-        
-        # Configuration buttons
-        self.configurePipesButton.clicked.connect(self._configure_pipes_mapping)
-        self.configureJunctionsButton.clicked.connect(self._configure_junctions_mapping)
-        
-        # Output path selection
-        self.browseOutputButton.clicked.connect(self._browse_output_file)
-        self.browseTemplateButton.clicked.connect(self._browse_template_file)
-        
-        # Export and validation
-        self.previewButton.clicked.connect(self._validate_configuration)
-        self.buttonBox.accepted.connect(self._execute_export)
-        
-        # Real-time validation triggers
-        self.outputPathEdit.textChanged.connect(self._on_configuration_changed)
-        self.scaleFactorSpinBox.valueChanged.connect(self._on_configuration_changed)
-        self.layerPrefixEdit.textChanged.connect(self._on_configuration_changed)
-    
-    def _on_validation_progress(self, progress: int, message: str):
-        """Handle validation progress updates."""
-        # Progress updates shown in validation text
-        if message:
-            self.validationTextEdit.append(f"Progress: {message}")
-    
-    def _on_pipes_layer_changed(self, layer: QgsVectorLayer):
-        """Handle pipes layer selection change."""
-        if layer and layer.isValid():
-            # Validate layer compatibility
-            validation_result = self.layer_manager.validate_layer_compatibility(layer, GeometryType.LINE)
-            
-            if validation_result.is_valid:
-                self.configurePipesButton.setEnabled(True)
-                self._show_validation_message("Pipes layer selected successfully", "info")
-            else:
-                self.configurePipesButton.setEnabled(False)
-                error_msg = "\n".join(validation_result.errors)
-                self._show_validation_message(f"Pipes layer validation failed:\n{error_msg}", "error")
-        else:
-            self.configurePipesButton.setEnabled(False)
-            self._show_validation_message("No pipes layer selected", "warning")
-        
-        self._on_configuration_changed()
-    
-    def _on_junctions_layer_changed(self, layer: QgsVectorLayer):
-        """Handle junctions layer selection change."""
-        if layer and layer.isValid():
-            # Validate layer compatibility
-            validation_result = self.layer_manager.validate_layer_compatibility(layer, GeometryType.POINT)
-            
-            if validation_result.is_valid:
-                self.configureJunctionsButton.setEnabled(True)
-                self._show_validation_message("Junctions layer selected successfully", "info")
-            else:
-                self.configureJunctionsButton.setEnabled(False)
-                error_msg = "\n".join(validation_result.errors)
-                self._show_validation_message(f"Junctions layer validation failed:\n{error_msg}", "error")
-        else:
-            self.configureJunctionsButton.setEnabled(False)
-            self._show_validation_message("No junctions layer selected (optional)", "info")
-        
-        self._on_configuration_changed()
-    
-    def _configure_pipes_mapping(self):
-        """Open pipes attribute mapping dialog."""
-        pipes_layer = self.pipesLayerCombo.currentLayer()
-        if not pipes_layer:
-            self._show_error_message("Please select a pipes layer first")
-            return
-        
-        try:
-            dialog = AttributeMapperDialog(
-                layer_manager=self.layer_manager,
-                parent=self
-            )
-            
-            # Configure the dialog for pipes layer
-            from ..core.field_definitions import SewageNetworkFields
-            dialog.configure_for_layer(
-                layer=pipes_layer,
-                geometry_type=GeometryType.LINE,
-                required_fields=SewageNetworkFields.get_pipes_required_fields(),
-                optional_fields=SewageNetworkFields.get_pipes_optional_fields()
-            )
-            
-            if dialog.exec_() == QDialog.Accepted:
-                mapping = dialog.get_mapping()
-                # Store mapping configuration
-                self.pipes_mapping = mapping
-                self._show_validation_message("Pipes mapping configured successfully", "info")
-                self._update_validation()
-                
-        except Exception as e:
-            import traceback
-            error_details = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-            error_msg = self.error_formatter.format_mapping_error("mapping_dialog_failed", error=error_details)
-            self._show_error_message(error_msg)
-    
-    def _configure_junctions_mapping(self):
-        """Open junctions attribute mapping dialog."""
-        junctions_layer = self.junctionsLayerCombo.currentLayer()
-        if not junctions_layer:
-            self._show_error_message("Please select a junctions layer first")
-            return
-        
-        try:
-            dialog = AttributeMapperDialog(
-                layer_manager=self.layer_manager,
-                parent=self
-            )
-            
-            # Configure the dialog for junctions layer
-            from ..core.field_definitions import SewageNetworkFields
-            dialog.configure_for_layer(
-                layer=junctions_layer,
-                geometry_type=GeometryType.POINT,
-                required_fields=SewageNetworkFields.get_junctions_required_fields(),
-                optional_fields=SewageNetworkFields.get_junctions_optional_fields()
-            )
-            
-            if dialog.exec_() == QDialog.Accepted:
-                mapping = dialog.get_mapping()
-                # Store mapping configuration
-                self.junctions_mapping = mapping
-                self._show_validation_message("Junctions mapping configured successfully", "info")
-                self._update_validation()
-                
-        except Exception as e:
-            import traceback
-            error_details = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-            error_msg = self.error_formatter.format_mapping_error("mapping_dialog_failed", error=error_details)
-            self._show_error_message(error_msg)
-    
-    def _browse_output_path(self):
-        """Browse for output DXF file path."""
-        current_path = self.outputPathEdit.text()
-        if not current_path:
-            current_path = os.path.expanduser("~/export.dxf")
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Select Output DXF File",
-            current_path,
-            "DXF Files (*.dxf);;All Files (*)"
-        )
-        
-        if file_path:
-            self.outputPathEdit.setText(file_path)
-    
-    def _browse_template_path(self):
-        """Browse for template DXF file path."""
-        current_path = self.templatePathEdit.text()
-        if not current_path:
-            current_path = os.path.expanduser("~")
-        
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Template DXF File",
-            current_path,
-            "DXF Files (*.dxf);;All Files (*)"
-        )
-        
-        if file_path:
-            self.templatePathEdit.setText(file_path)
+       
     
     def _validate_configuration(self):
         """Validate the complete export configuration."""

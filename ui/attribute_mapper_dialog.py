@@ -166,6 +166,94 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
         # Update validation
         self._update_validation()
     
+    def _update_mapping_display(self):
+        """
+        Update the UI tables to reflect the current field_mappings and default_values.
+        This is called after set_mapping() to sync the internal state with the UI.
+        """
+        # Update required fields table
+        table = self.requiredFieldsTable
+        for row in range(table.rowCount()):
+            name_item = table.item(row, 0)
+            if not name_item:
+                continue
+            
+            field_name = name_item.text()
+            
+            # Update combo box selection
+            combo = table.cellWidget(row, 2)
+            if combo and isinstance(combo, QComboBox):
+                mapped_field = self.field_mappings.get(field_name)
+                if mapped_field:
+                    # Find the index for this field
+                    idx = combo.findData(mapped_field)
+                    if idx >= 0:
+                        combo.blockSignals(True)  # Prevent triggering handlers
+                        combo.setCurrentIndex(idx)
+                        combo.blockSignals(False)
+            
+            # Update default value line edit
+            default_edit = table.cellWidget(row, 3)
+            if default_edit and isinstance(default_edit, QLineEdit):
+                default_val = self.default_values.get(field_name)
+                if default_val is not None:
+                    default_edit.blockSignals(True)
+                    default_edit.setText(str(default_val))
+                    default_edit.blockSignals(False)
+            
+            # Update status column
+            status_item = table.item(row, 4)
+            if status_item:
+                is_mapped = field_name in self.field_mappings
+                has_default = field_name in self.default_values
+                if is_mapped:
+                    status_item.setText("Mapped")
+                elif has_default:
+                    status_item.setText("Default")
+                else:
+                    status_item.setText("Not Configured")
+        
+        # Update optional fields table similarly
+        table = self.optionalFieldsTable
+        for row in range(table.rowCount()):
+            name_item = table.item(row, 0)
+            if not name_item:
+                continue
+            
+            field_name = name_item.text()
+            
+            # Update combo box selection
+            combo = table.cellWidget(row, 2)
+            if combo and isinstance(combo, QComboBox):
+                mapped_field = self.field_mappings.get(field_name)
+                if mapped_field:
+                    idx = combo.findData(mapped_field)
+                    if idx >= 0:
+                        combo.blockSignals(True)
+                        combo.setCurrentIndex(idx)
+                        combo.blockSignals(False)
+            
+            # Update default value line edit
+            default_edit = table.cellWidget(row, 3)
+            if default_edit and isinstance(default_edit, QLineEdit):
+                default_val = self.default_values.get(field_name)
+                if default_val is not None:
+                    default_edit.blockSignals(True)
+                    default_edit.setText(str(default_val))
+                    default_edit.blockSignals(False)
+            
+            # Update status column
+            status_item = table.item(row, 4)
+            if status_item:
+                is_mapped = field_name in self.field_mappings
+                has_default = field_name in self.default_values
+                if is_mapped:
+                    status_item.setText("Mapped")
+                elif has_default:
+                    status_item.setText("Default")
+                else:
+                    status_item.setText("Not Configured")
+    
     def _update_layer_info(self):
         """Update the layer information display."""
         if not self.current_layer:
@@ -404,65 +492,7 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
         self._update_validation()
         
         self.mapping_changed.emit()
-    
-    def _update_mapping_display(self):
-        """Update the UI to reflect current mappings."""
-        # Update required fields table
-        for row in range(self.requiredFieldsTable.rowCount()):
-            field_name_item = self.requiredFieldsTable.item(row, 0)
-            if field_name_item:
-                field_name = field_name_item.text()
-                
-                # Update combo box
-                combo = self.requiredFieldsTable.cellWidget(row, 2)
-                if isinstance(combo, QComboBox):
-                    if field_name in self.field_mappings:
-                        mapped_field = self.field_mappings[field_name]
-                        index = combo.findText(mapped_field)
-                        if index >= 0:
-                            combo.setCurrentIndex(index)
-                    else:
-                        combo.setCurrentIndex(0)  # "-- Not Mapped --"
-                
-                # Update default value
-                default_edit = self.requiredFieldsTable.cellWidget(row, 3)
-                if isinstance(default_edit, QLineEdit):
-                    default_value = self.default_values.get(field_name, "")
-                    default_edit.setText(default_value)
-                
-                # Update status
-                field = next((f for f in self.required_fields if f.name == field_name), None)
-                if field:
-                    self._update_field_status(self.requiredFieldsTable, row, field)
-        
-        # Update optional fields table
-        for row in range(self.optionalFieldsTable.rowCount()):
-            field_name_item = self.optionalFieldsTable.item(row, 0)
-            if field_name_item:
-                field_name = field_name_item.text()
-                
-                # Update combo box
-                combo = self.optionalFieldsTable.cellWidget(row, 2)
-                if isinstance(combo, QComboBox):
-                    if field_name in self.field_mappings:
-                        mapped_field = self.field_mappings[field_name]
-                        index = combo.findText(mapped_field)
-                        if index >= 0:
-                            combo.setCurrentIndex(index)
-                    else:
-                        combo.setCurrentIndex(0)  # "-- Not Mapped --"
-                
-                # Update default value
-                default_edit = self.optionalFieldsTable.cellWidget(row, 3)
-                if isinstance(default_edit, QLineEdit):
-                    default_value = self.default_values.get(field_name, "")
-                    default_edit.setText(default_value)
-                
-                # Update status
-                field = next((f for f in self.optional_fields if f.name == field_name), None)
-                if field:
-                    self._update_field_status(self.optionalFieldsTable, row, field)
-    
+       
     def _validate_mapping(self):
         """Validate current mapping and show detailed results."""
         validation_errors = self._get_validation_errors()
@@ -489,13 +519,13 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
             )
             self.buttonBox.button(self.buttonBox.Ok).setEnabled(True)
         else:
-            error_text = "Mapping Issues:\\n" + "\\n".join(f"• {error}" for error in validation_errors)
+            error_text = "Mapping Issues:\n" + "\n".join(f"• {error}" for error in validation_errors)
             self.validationTextEdit.setPlainText(error_text)
             self.validationTextEdit.setStyleSheet(
                 "QTextEdit { background-color: #ffeaea; color: #5a2d2d; }"
             )
             self.buttonBox.button(self.buttonBox.Ok).setEnabled(False)
-    
+
     def _get_validation_errors(self) -> List[str]:
         """Get current validation errors."""
         errors = []
@@ -539,7 +569,7 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
             is_valid=len(validation_errors) == 0,
             validation_errors=validation_errors if validation_errors else None
         )
-    
+
     def set_mapping(self, mapping: LayerMapping):
         """
         Set the current mapping from a LayerMapping object.
@@ -547,8 +577,9 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
         Args:
             mapping: LayerMapping to apply
         """
-        if mapping.layer_id != self.current_layer.id():
-            return  # Mapping is for a different layer
+        # We don't check layer_id strictly here because usually we WANT to apply
+        # the saved mapping to the current layer even if IDs somehow differ
+        # (e.g. if the user wants to apply a template or previous config)
         
         self.field_mappings = mapping.field_mappings.copy()
         self.default_values = mapping.default_values.copy()

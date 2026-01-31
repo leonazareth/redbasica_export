@@ -41,7 +41,7 @@ class PluginPackager:
             "*.md",
             "metadata.txt",
             "icon.png",
-            "icon_2.png",
+            "icon.png",
             "LICENSE",
             "ui/",
             "core/",
