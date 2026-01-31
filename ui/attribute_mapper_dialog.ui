@@ -107,16 +107,6 @@
         </property>
        </spacer>
       </item>
-      <item>
-       <widget class="QPushButton" name="validateMappingButton">
-        <property name="text">
-         <string>Validate Mapping</string>
-        </property>
-        <property name="toolTip">
-         <string>Check if current mapping is complete and valid</string>
-        </property>
-       </widget>
-      </item>
      </layout>
     </widget>
    </item>

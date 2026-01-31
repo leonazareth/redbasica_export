@@ -128,7 +128,6 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
         # Mapping action buttons
         self.autoMapButton.clicked.connect(self._auto_map_fields)
         self.clearMappingButton.clicked.connect(self._clear_all_mappings)
-        self.validateMappingButton.clicked.connect(self._validate_mapping)
         
         # Table cell changes will be connected when tables are populated
     
@@ -470,12 +469,6 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
             self._update_mapping_display()
             self._update_validation()
             
-            QMessageBox.information(
-                self, "Auto-Mapping Complete",
-                f"Applied {applied_count} automatic field mappings and default values. "
-                "Please review and adjust as needed."
-            )
-            
         except Exception as e:
             QMessageBox.critical(
                 self, "Auto-Mapping Error",
@@ -492,21 +485,6 @@ class AttributeMapperDialog(QDialog, FORM_CLASS):
         self._update_validation()
         
         self.mapping_changed.emit()
-       
-    def _validate_mapping(self):
-        """Validate current mapping and show detailed results."""
-        validation_errors = self._get_validation_errors()
-        
-        if not validation_errors:
-            QMessageBox.information(
-                self, "Validation Success",
-                "✓ Field mapping is complete and valid for export."
-            )
-        else:
-            error_text = "Validation Issues:\\n\\n" + "\\n".join(f"• {error}" for error in validation_errors)
-            QMessageBox.warning(
-                self, "Validation Issues", error_text
-            )
     
     def _update_validation(self):
         """Update validation status display."""

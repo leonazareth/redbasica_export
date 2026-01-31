@@ -29,6 +29,7 @@ from ..core.error_messages import create_error_formatter
 from ..core.dxf_exporter import DXFExporter
 from ..core.i18n_manager import tr
 from .attribute_mapper_dialog import AttributeMapperDialog
+from .collapsible_group_box import CollapsibleGroupBox
 
 # Load UI file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -93,6 +94,9 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.validationTextEdit.setStyleSheet(
             "QTextEdit { background-color: #f0f0f0; }"
         )
+        
+        # Setup collapsible Advanced Options section
+        self._setup_collapsible_advanced_options()
     
     def _setup_layer_combos(self):
         """Configure layer combo boxes with appropriate filtering."""
@@ -106,6 +110,44 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.junctionsLayerCombo.setAllowEmptyLayer(True)
         self.junctionsLayerCombo.setShowCrs(True)
     
+    def _setup_collapsible_advanced_options(self):
+        """Replace the static Advanced Options group with a collapsible one."""
+        # Get the main layout
+        main_layout = self.layout()
+        
+        # Find and remove the current advancedOptionsGroup
+        old_group = self.advancedOptionsGroup
+        old_group_index = main_layout.indexOf(old_group)
+        
+        # Create the collapsible group box (collapsed by default)
+        self.collapsible_advanced = CollapsibleGroupBox(
+            title="Advanced Options", 
+            collapsed=True
+        )
+        
+        # Move widgets from old group to new collapsible group
+        # We need to re-parent the widgets
+        self.collapsible_advanced.addWidget(self.includeArrowsCheckBox)
+        self.collapsible_advanced.addWidget(self.includeLabelsCheckBox)
+        self.collapsible_advanced.addWidget(self.includeElevationsCheckBox)
+        
+        # Create a container for the label format row
+        from qgis.PyQt.QtWidgets import QHBoxLayout, QWidget
+        label_format_container = QWidget()
+        label_format_layout = QHBoxLayout(label_format_container)
+        label_format_layout.setContentsMargins(0, 0, 0, 0)
+        label_format_layout.addWidget(self.labelFormatLabel)
+        label_format_layout.addWidget(self.labelFormatEdit)
+        self.collapsible_advanced.addWidget(label_format_container)
+        
+        # Hide and remove old group
+        old_group.hide()
+        main_layout.removeWidget(old_group)
+        old_group.deleteLater()
+        
+        # Insert collapsible group at same position
+        main_layout.insertWidget(old_group_index, self.collapsible_advanced)
+    
     def _connect_signals(self):
         """Connect UI signals to handlers."""
         # Layer selection changes
@@ -118,16 +160,11 @@ class MainExportDialog(QDialog, FORM_CLASS):
         
         # File browser buttons
         self.browseOutputButton.clicked.connect(self._browse_output_file)
-        self.browseTemplateButton.clicked.connect(self._browse_template_file)
-        
-        # Preview button
-        self.previewButton.clicked.connect(self._preview_export)
         
         # Validation triggers
         self.outputPathEdit.textChanged.connect(self._update_validation)
         self.scaleFactorSpinBox.valueChanged.connect(self._update_validation)
         self.layerPrefixEdit.textChanged.connect(self._update_validation)
-        self.templatePathEdit.textChanged.connect(self._update_validation)
         
         # Advanced options
         self.includeArrowsCheckBox.toggled.connect(self._update_validation)
@@ -266,116 +303,6 @@ class MainExportDialog(QDialog, FORM_CLASS):
         if file_path:
             self.outputPathEdit.setText(file_path)
     
-    def _browse_template_file(self):
-        """Browse for DXF template file."""
-        current_path = self.templatePathEdit.text()
-        if not current_path:
-            current_path = os.path.expanduser("~")
-        
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select DXF Template",
-            current_path,
-            "DXF Files (*.dxf);;All Files (*)"
-        )
-        
-        if file_path:
-            self.templatePathEdit.setText(file_path)
-    
-    def _preview_export(self):
-        """Generate and display export preview."""
-        try:
-            config = self.get_export_configuration()
-            if not config:
-                return
-            
-            # Generate preview information
-            preview_info = self._generate_preview_info(config)
-            
-            # Display preview
-            preview_text = self._format_preview_text(preview_info)
-            
-            QMessageBox.information(
-                self, "Export Preview", preview_text
-            )
-            
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Preview Error",
-                f"Failed to generate export preview:\n{str(e)}"
-            )
-    
-    def _generate_preview_info(self, config: ExportConfiguration) -> Dict:
-        """Generate preview information for the export."""
-        info = {
-            'pipes_layer': config.pipes_mapping.layer_name if config.pipes_mapping else None,
-            'junctions_layer': config.junctions_mapping.layer_name if config.junctions_mapping else None,
-            'output_path': config.output_path,
-            'scale_factor': config.scale_factor,
-            'layer_prefix': config.layer_prefix,
-            'template_path': config.template_path,
-            'options': {
-                'arrows': config.include_arrows,
-                'labels': config.include_labels,
-                'elevations': config.include_elevations
-            }
-        }
-        
-        # Count features if layers are available
-        if config.pipes_mapping and config.pipes_mapping.layer_id:
-            layer = QgsProject.instance().mapLayer(config.pipes_mapping.layer_id)
-            if layer:
-                info['pipes_count'] = layer.featureCount()
-        
-        if config.junctions_mapping and config.junctions_mapping.layer_id:
-            layer = QgsProject.instance().mapLayer(config.junctions_mapping.layer_id)
-            if layer:
-                info['junctions_count'] = layer.featureCount()
-        
-        return info
-    
-    def _format_preview_text(self, info: Dict) -> str:
-        """Format preview information as readable text."""
-        lines = ["Export Configuration Preview:", ""]
-        
-        # Layers
-        lines.append("Layers:")
-        if info.get('pipes_layer'):
-            count = info.get('pipes_count', 'unknown')
-            lines.append(f"  • Pipes: {info['pipes_layer']} ({count} features)")
-        else:
-            lines.append("  • Pipes: Not selected")
-        
-        if info.get('junctions_layer'):
-            count = info.get('junctions_count', 'unknown')
-            lines.append(f"  • Junctions: {info['junctions_layer']} ({count} features)")
-        else:
-            lines.append("  • Junctions: Not selected")
-        
-        lines.append("")
-        
-        # Output settings
-        lines.append("Output Settings:")
-        lines.append(f"  • File: {info['output_path']}")
-        lines.append(f"  • Scale Factor: {info['scale_factor']}")
-        lines.append(f"  • Layer Prefix: {info['layer_prefix']}")
-        
-        if info['template_path']:
-            lines.append(f"  • Template: {info['template_path']}")
-        else:
-            lines.append("  • Template: Default template will be used")
-        
-        lines.append("")
-        
-        # Options
-        lines.append("Export Options:")
-        options = info['options']
-        lines.append(f"  • Flow Arrows: {'Yes' if options['arrows'] else 'No'}")
-        lines.append(f"  • Pipe Labels: {'Yes' if options['labels'] else 'No'}")
-        lines.append(f"  • Elevation Data: {'Yes' if options['elevations'] else 'No'}")
-        
-        return "\n".join(lines)
-    
     def _update_validation(self):
         """Update validation status display."""
         validation_errors = self.validate_configuration()
@@ -436,11 +363,6 @@ class MainExportDialog(QDialog, FORM_CLASS):
             elif output_dir and not os.access(output_dir, os.W_OK):
                 errors.append(f"Output directory is not writable: {output_dir}")
         
-        # Check template path if specified
-        template_path = self.templatePathEdit.text().strip()
-        if template_path and not os.path.exists(template_path):
-            errors.append(f"Template file does not exist: {template_path}")
-        
         # Check scale factor
         if self.scaleFactorSpinBox.value() <= 0:
             errors.append("Scale factor must be greater than 0")
@@ -481,7 +403,7 @@ class MainExportDialog(QDialog, FORM_CLASS):
             output_path=self.outputPathEdit.text().strip(),
             scale_factor=self.scaleFactorSpinBox.value(),
             layer_prefix=self.layerPrefixEdit.text().strip(),
-            template_path=self.templatePathEdit.text().strip() or None,
+            template_path=None,
             include_arrows=self.includeArrowsCheckBox.isChecked(),
             include_labels=self.includeLabelsCheckBox.isChecked(),
             include_elevations=self.includeElevationsCheckBox.isChecked(),
@@ -497,9 +419,6 @@ class MainExportDialog(QDialog, FORM_CLASS):
             )
             self.layerPrefixEdit.setText(
                 self.configuration.get_setting('layer_prefix', 'ESG_')
-            )
-            self.templatePathEdit.setText(
-                self.configuration.get_setting('template_path', '')
             )
             
             # Load advanced options
@@ -530,7 +449,6 @@ class MainExportDialog(QDialog, FORM_CLASS):
         try:
             self.configuration.set_setting('scale_factor', self.scaleFactorSpinBox.value())
             self.configuration.set_setting('layer_prefix', self.layerPrefixEdit.text())
-            self.configuration.set_setting('template_path', self.templatePathEdit.text())
             self.configuration.set_setting('include_arrows', self.includeArrowsCheckBox.isChecked())
             self.configuration.set_setting('include_labels', self.includeLabelsCheckBox.isChecked())
             self.configuration.set_setting('include_elevations', self.includeElevationsCheckBox.isChecked())
@@ -660,7 +578,7 @@ class MainExportDialog(QDialog, FORM_CLASS):
             output_path=self.outputPathEdit.text(),
             scale_factor=self.scaleFactorSpinBox.value(),
             layer_prefix=self.layerPrefixEdit.text(),
-            template_path=self.templatePathEdit.text() or None,
+            template_path=None,
             include_arrows=self.includeArrowsCheckBox.isChecked(),
             include_labels=self.includeLabelsCheckBox.isChecked(),
             include_elevations=self.includeElevationsCheckBox.isChecked(),
@@ -748,7 +666,6 @@ class MainExportDialog(QDialog, FORM_CLASS):
                 self.outputPathEdit.setText(config.output_path or "")
                 self.scaleFactorSpinBox.setValue(config.scale_factor)
                 self.layerPrefixEdit.setText(config.layer_prefix)
-                self.templatePathEdit.setText(config.template_path or "")
                 self.includeArrowsCheckBox.setChecked(config.include_arrows)
                 self.includeLabelsCheckBox.setChecked(config.include_labels)
                 self.includeElevationsCheckBox.setChecked(config.include_elevations)

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
-    <height>700</height>
+    <width>510</width>
+    <height>350</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -153,31 +153,6 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="templatePathLabel">
-        <property name="text">
-         <string>Template File:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1">
-       <layout class="QHBoxLayout" name="templatePathLayout">
-        <item>
-         <widget class="QLineEdit" name="templatePathEdit">
-          <property name="toolTip">
-           <string>Optional DXF template file (leave empty for default)</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="browseTemplateButton">
-          <property name="text">
-           <string>Browse...</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
      </layout>
     </widget>
    </item>
@@ -272,32 +247,7 @@
      </layout>
     </widget>
    </item>
-   <item>
-    <widget class="QGroupBox" name="previewGroup">
-     <property name="title">
-      <string>Export Preview</string>
-     </property>
-     <layout class="QVBoxLayout" name="previewVerticalLayout">
-      <item>
-       <widget class="QLabel" name="previewLabel">
-        <property name="text">
-         <string>Click 'Preview Export' to see what will be exported</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="previewButton">
-        <property name="text">
-         <string>Preview Export</string>
-        </property>
-        <property name="toolTip">
-         <string>Generate export preview without creating the DXF file</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
+
    <item>
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
