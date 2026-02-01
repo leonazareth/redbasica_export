@@ -423,17 +423,18 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         # Custom Dialog for multiple field selection
         dialog = NodeAssignmentDialog(fields, parent=self)
         if dialog.exec_() == QDialog.Accepted:
-            node_id_field, depth_field, elev_field = dialog.get_selected_fields()
-            self._execute_node_assignment(node_id_field, depth_field, elev_field)
+            node_id_field, depth_field, ground_elev_field, invert_elev_field = dialog.get_selected_fields()
+            self._execute_node_assignment(node_id_field, depth_field, ground_elev_field, invert_elev_field)
 
-    def _execute_node_assignment(self, node_id_field, depth_field=None, elev_field=None):
+    def _execute_node_assignment(self, node_id_field, depth_field=None, ground_elev_field=None, invert_elev_field=None):
         """
         Execute the spatial assignment of Node attributes to pipes.
         
         Args:
             node_id_field (str): Name of the ID field in junctions layer
             depth_field (str): Name of depth field (optional)
-            elev_field (str): Name of elevation field (optional)
+            ground_elev_field (str): Name of ground elevation (CT) field (optional)
+            invert_elev_field (str): Name of invert elevation (CF) field (optional)
         """
         pipes_layer = self.pipesLayerCombo.currentLayer()
         junctions_layer = self.junctionsLayerCombo.currentLayer()
@@ -454,13 +455,16 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             fields_to_add = []
             
             # Map of fields to create -> Type
+            # New naming: node_up_* (upstream/montante) and node_down_* (downstream/jusante)
             new_fields = {
-                'p1_id': QVariant.String,
-                'p2_id': QVariant.String,
-                'p1_h': QVariant.Double,
-                'p2_h': QVariant.Double,
-                'p1_elev': QVariant.Double,
-                'p2_elev': QVariant.Double
+                'node_up_id': QVariant.String,
+                'node_down_id': QVariant.String,
+                'node_up_depth': QVariant.Double,      # Profundidade (h) do nó montante
+                'node_down_depth': QVariant.Double,    # Profundidade (h) do nó jusante
+                'node_up_ground_elev': QVariant.Double,    # Cota do terreno (CT) montante
+                'node_down_ground_elev': QVariant.Double,  # Cota do terreno (CT) jusante
+                'node_up_invert_elev': QVariant.Double,    # Cota de fundo (CF) montante
+                'node_down_invert_elev': QVariant.Double   # Cota de fundo (CF) jusante
             }
             
             for field_name, field_type in new_fields.items():
@@ -473,12 +477,14 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             # Get field indices
             idx_map = {
-                'p1_id': pipes_layer.fields().indexFromName('p1_id'),
-                'p2_id': pipes_layer.fields().indexFromName('p2_id'),
-                'p1_h': pipes_layer.fields().indexFromName('p1_h'),
-                'p2_h': pipes_layer.fields().indexFromName('p2_h'),
-                'p1_elev': pipes_layer.fields().indexFromName('p1_elev'),
-                'p2_elev': pipes_layer.fields().indexFromName('p2_elev')
+                'node_up_id': pipes_layer.fields().indexFromName('node_up_id'),
+                'node_down_id': pipes_layer.fields().indexFromName('node_down_id'),
+                'node_up_depth': pipes_layer.fields().indexFromName('node_up_depth'),
+                'node_down_depth': pipes_layer.fields().indexFromName('node_down_depth'),
+                'node_up_ground_elev': pipes_layer.fields().indexFromName('node_up_ground_elev'),
+                'node_down_ground_elev': pipes_layer.fields().indexFromName('node_down_ground_elev'),
+                'node_up_invert_elev': pipes_layer.fields().indexFromName('node_up_invert_elev'),
+                'node_down_invert_elev': pipes_layer.fields().indexFromName('node_down_invert_elev')
             }
 
             # Build Spatial Index
@@ -490,9 +496,11 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             for j_feat in junctions_layer.getFeatures():
                 data = {'id': j_feat[node_id_field]}
                 if depth_field:
-                    data['h'] = j_feat[depth_field]
-                if elev_field:
-                    data['elev'] = j_feat[elev_field]
+                    data['depth'] = j_feat[depth_field]
+                if ground_elev_field:
+                    data['ground_elev'] = j_feat[ground_elev_field]
+                if invert_elev_field:
+                    data['invert_elev'] = j_feat[invert_elev_field]
                 junction_cache[j_feat.id()] = data
 
             count = 0
@@ -526,18 +534,21 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     u_feat_id = upstream_ids[0]
                     u_data = junction_cache.get(u_feat_id, {})
                     
-                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p1_id'], u_data.get('id', NULL))
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_id'], u_data.get('id', NULL))
                     if depth_field:
-                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p1_h'], u_data.get('h', NULL))
-                    if elev_field:
-                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p1_elev'], u_data.get('elev', NULL))
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_depth'], u_data.get('depth', NULL))
+                    if ground_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_ground_elev'], u_data.get('ground_elev', NULL))
+                    if invert_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_invert_elev'], u_data.get('invert_elev', NULL))
                         
                     found_upstream = True
                 else:
-                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p1_id'], NULL)
-                    # Clear other fields if no node found (optional but cleaner)
-                    if depth_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p1_h'], NULL)
-                    if elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p1_elev'], NULL)
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_id'], NULL)
+                    # Clear other fields if no node found
+                    if depth_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_depth'], NULL)
+                    if ground_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_ground_elev'], NULL)
+                    if invert_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_invert_elev'], NULL)
                     has_missing_node = True
 
                 # Search Downstream (End Point)
@@ -547,17 +558,20 @@ class RedBasicaExportDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     d_feat_id = downstream_ids[0]
                     d_data = junction_cache.get(d_feat_id, {})
                     
-                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p2_id'], d_data.get('id', NULL))
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_id'], d_data.get('id', NULL))
                     if depth_field:
-                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p2_h'], d_data.get('h', NULL))
-                    if elev_field:
-                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p2_elev'], d_data.get('elev', NULL))
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_depth'], d_data.get('depth', NULL))
+                    if ground_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_ground_elev'], d_data.get('ground_elev', NULL))
+                    if invert_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_invert_elev'], d_data.get('invert_elev', NULL))
                         
                     found_downstream = True
                 else:
-                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p2_id'], NULL)
-                    if depth_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p2_h'], NULL)
-                    if elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['p2_elev'], NULL)
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_id'], NULL)
+                    if depth_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_depth'], NULL)
+                    if ground_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_ground_elev'], NULL)
+                    if invert_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_invert_elev'], NULL)
                     has_missing_node = True
                 
                 if found_upstream and found_downstream:
@@ -623,22 +637,31 @@ class NodeAssignmentDialog(QDialog):
         self._set_default(self.id_combo, ["id_nodo_(n", "node_id", "id"])
         layout.addWidget(self.id_combo)
         
-        # Depth Field
-        layout.addWidget(QLabel("Node Depth Field (h):"))
+        # Ground Elevation Field (CT - Cota do Terreno)
+        layout.addWidget(QLabel("Ground Elevation Field (CT):"))
+        self.ground_elev_combo = QComboBox()
+        self.ground_elev_combo.addItem(" - Skip - ", None)
+        self.ground_elev_combo.addItems(fields)
+        self._set_default(self.ground_elev_combo, ["ct_(n)", "ground_elev", "cota_terreno", "elev"])
+        layout.addWidget(self.ground_elev_combo)
+        
+        # Invert Elevation Field (CF - Cota de Fundo)
+        layout.addWidget(QLabel("Invert Elevation Field (CF):"))
+        self.invert_elev_combo = QComboBox()
+        self.invert_elev_combo.addItem(" - Skip - ", None)
+        self.invert_elev_combo.addItems(fields)
+        self._set_default(self.invert_elev_combo, ["cf_nodo", "invert_elev", "cota_fundo", "cf"])
+        layout.addWidget(self.invert_elev_combo)
+        
+        # Depth Field (Profundidade - optional, pode ser calculado)
+        layout.addWidget(QLabel("Depth Field (h) [optional]:"))
         self.depth_combo = QComboBox()
         self.depth_combo.addItem(" - Skip - ", None)
         self.depth_combo.addItems(fields)
         self._set_default(self.depth_combo, ["h_nodo_nt", "depth", "profundidade"])
         layout.addWidget(self.depth_combo)
         
-        # Elevation Field
-        layout.addWidget(QLabel("Node Elevation Field (Terrain/Cover):"))
-        self.elev_combo = QComboBox()
-        self.elev_combo.addItem(" - Skip - ", None)
-        self.elev_combo.addItems(fields)
-        self._set_default(self.elev_combo, ["ct_(n)", "elev", "cota"])
-        layout.addWidget(self.elev_combo)
-        
+
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -646,24 +669,37 @@ class NodeAssignmentDialog(QDialog):
         layout.addWidget(buttons)
         
     def _set_default(self, combo, candidates):
-        """Select first matching candidate based on priority."""
+        """Select first matching candidate based on priority. Exact match first, then partial."""
+        # First pass: exact match (case insensitive)
         for cand in candidates:
-            cand = cand.lower()
+            cand_lower = cand.lower()
             for i in range(combo.count()):
                 text = combo.itemText(i).lower()
-                if cand in text: # flexible matching
+                if cand_lower == text:  # Exact match
+                    combo.setCurrentIndex(i)
+                    return
+        
+        # Second pass: partial match (contains)
+        for cand in candidates:
+            cand_lower = cand.lower()
+            for i in range(combo.count()):
+                text = combo.itemText(i).lower()
+                if cand_lower in text:  # Partial match
                     combo.setCurrentIndex(i)
                     return
 
     def get_selected_fields(self):
-        """Return (id_field, depth_field, elev_field)."""
+        """Return (id_field, depth_field, ground_elev_field, invert_elev_field)."""
         id_f = self.id_combo.currentText()
         
         depth_f = self.depth_combo.currentText()
         if depth_f == " - Skip - ": depth_f = None
         
-        elev_f = self.elev_combo.currentText()
-        if elev_f == " - Skip - ": elev_f = None
+        ground_elev_f = self.ground_elev_combo.currentText()
+        if ground_elev_f == " - Skip - ": ground_elev_f = None
         
-        return id_f, depth_f, elev_f
+        invert_elev_f = self.invert_elev_combo.currentText()
+        if invert_elev_f == " - Skip - ": invert_elev_f = None
+        
+        return id_f, depth_f, ground_elev_f, invert_elev_f
 
