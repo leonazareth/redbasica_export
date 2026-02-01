@@ -143,6 +143,19 @@ class LayerMapping:
         return unmapped
 
 
+
+class ExportMode(Enum):
+    """Enumeration of export modes."""
+    STANDARD = "Standard (Layers)"
+    ENHANCED = "Enhanced (MTEXT/Multileader)"
+
+
+class LabelStyle(Enum):
+    """Enumeration of pipe label styles."""
+    COMPACT = "Compact (2 lines)"
+    STACKED = "Stacked (4 lines)"
+
+
 @dataclass
 class ExportConfiguration:
     """Complete configuration for DXF export operation."""
@@ -150,12 +163,16 @@ class ExportConfiguration:
     junctions_mapping: Optional[LayerMapping] = None
     output_path: str = ""
     scale_factor: int = 2000
-    layer_prefix: str = "ESG_"
+    layer_prefix: str = "RB_"
     template_path: Optional[str] = None
     include_arrows: bool = True
     include_labels: bool = True
     include_elevations: bool = True
+    export_node_id: bool = False  # Whether to include node ID in MULTILEADER labels
+    include_slope_unit: bool = False  # Whether to append 'm/m' after slope value
     label_format: str = "{length:.0f}-{diameter:.0f}-{slope:.5f}"
+    export_mode: ExportMode = ExportMode.STANDARD
+    label_style: LabelStyle = LabelStyle.COMPACT
     
     def __post_init__(self):
         """Debug ExportConfiguration creation."""

@@ -127,12 +127,74 @@ class MainExportDialog(QDialog, FORM_CLASS):
         
         # Move widgets from old group to new collapsible group
         # We need to re-parent the widgets
-        self.collapsible_advanced.addWidget(self.includeArrowsCheckBox)
-        self.collapsible_advanced.addWidget(self.includeLabelsCheckBox)
+        
+        # Move widgets from old group to new collapsible group
+        # We need to re-parent the widgets
+        
+        # 1. Export Mode Selection
+        from qgis.PyQt.QtWidgets import QHBoxLayout, QWidget, QLabel, QComboBox
+        from ..core.data_structures import ExportMode, LabelStyle
+        
+        mode_container = QWidget()
+        mode_layout = QHBoxLayout(mode_container)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.exportModeLabel = QLabel("Export Mode:")
+        self.exportModeCombo = QComboBox()
+        for mode in ExportMode:
+            self.exportModeCombo.addItem(mode.value, mode)
+            
+        mode_layout.addWidget(self.exportModeLabel)
+        mode_layout.addWidget(self.exportModeCombo)
+        self.collapsible_advanced.addWidget(mode_container)
+        
+        # 2. Hidden Checkboxes (always TRUE - user always wants arrows/labels)
+        # Create NEW checkbox instances since originals get deleted with old_group
+        from qgis.PyQt.QtWidgets import QCheckBox
+        self.includeArrowsCheckBox = QCheckBox("Include flow direction arrows")
+        self.includeArrowsCheckBox.setChecked(True)  # Always TRUE
+        self.includeLabelsCheckBox = QCheckBox("Include pipe labels")
+        self.includeLabelsCheckBox.setChecked(True)  # Always TRUE
+        # Don't add to UI - they're hidden but accessible for config
+        
+        # 3. Label Style (Sub-option for Labels)
+        style_container = QWidget()
+        style_layout = QHBoxLayout(style_container)
+        style_layout.setContentsMargins(20, 0, 0, 0) # Indent to show hierarchy
+        
+        self.labelStyleLabel = QLabel("Label Style:")
+        self.labelStyleCombo = QComboBox()
+        for style in LabelStyle:
+            self.labelStyleCombo.addItem(style.value, style)
+            
+        style_layout.addWidget(self.labelStyleLabel)
+        style_layout.addWidget(self.labelStyleCombo)
+        self.collapsible_advanced.addWidget(style_container)
+        
+        # Connect logic to enable/disable style combo based on includeLabels
+        def update_style_combo_state(checked):
+            self.labelStyleCombo.setEnabled(checked)
+            self.labelStyleLabel.setEnabled(checked)
+        self.includeLabelsCheckBox.toggled.connect(update_style_combo_state)
+        # Initialize state
+        update_style_combo_state(self.includeLabelsCheckBox.isChecked())
+
         self.collapsible_advanced.addWidget(self.includeElevationsCheckBox)
         
+        # 4. Export Node ID in Labels (unchecked by default)
+        from qgis.PyQt.QtWidgets import QCheckBox
+        self.exportNodeIdCheckBox = QCheckBox("Export Node ID in Labels")
+        self.exportNodeIdCheckBox.setChecked(False)  # Default: unchecked
+        self.exportNodeIdCheckBox.setToolTip("When checked, includes the node identifier after the depth value in labels")
+        self.collapsible_advanced.addWidget(self.exportNodeIdCheckBox)
+        
+        # 5. Include Slope Unit (unchecked by default)
+        self.includeSlopeUnitCheckBox = QCheckBox("Include Slope Unit (m/m)")
+        self.includeSlopeUnitCheckBox.setChecked(False)  # Default: unchecked
+        self.includeSlopeUnitCheckBox.setToolTip("When checked, appends 'm/m' after slope values")
+        self.collapsible_advanced.addWidget(self.includeSlopeUnitCheckBox)
+        
         # Create a container for the label format row
-        from qgis.PyQt.QtWidgets import QHBoxLayout, QWidget
         label_format_container = QWidget()
         label_format_layout = QHBoxLayout(label_format_container)
         label_format_layout.setContentsMargins(0, 0, 0, 0)
@@ -407,21 +469,36 @@ class MainExportDialog(QDialog, FORM_CLASS):
             include_arrows=self.includeArrowsCheckBox.isChecked(),
             include_labels=self.includeLabelsCheckBox.isChecked(),
             include_elevations=self.includeElevationsCheckBox.isChecked(),
-            label_format=self.labelFormatEdit.text().strip()
+            export_node_id=self.exportNodeIdCheckBox.isChecked(),
+            include_slope_unit=self.includeSlopeUnitCheckBox.isChecked(),
+            label_format=self.labelFormatEdit.text().strip(),
+            export_mode=self.exportModeCombo.currentData(),
+            label_style=self.labelStyleCombo.currentData()
         )
     
     def _load_configuration(self):
         """Load saved configuration settings."""
         try:
+            from ..core.data_structures import ExportMode, LabelStyle
+
             # Load basic settings
             self.scaleFactorSpinBox.setValue(
                 self.configuration.get_setting('scale_factor', 2000)
             )
             self.layerPrefixEdit.setText(
-                self.configuration.get_setting('layer_prefix', 'ESG_')
+                self.configuration.get_setting('layer_prefix', 'RB_')
             )
             
             # Load advanced options
+            
+            # Export Mode
+            saved_mode_name = self.configuration.get_setting('export_mode', ExportMode.STANDARD.name)
+            
+            # Find and set the mode in combobox
+            mode_index = self.exportModeCombo.findData(ExportMode[saved_mode_name])
+            if mode_index >= 0:
+                self.exportModeCombo.setCurrentIndex(mode_index)
+
             self.includeArrowsCheckBox.setChecked(
                 self.configuration.get_setting('include_arrows', True)
             )
@@ -431,6 +508,13 @@ class MainExportDialog(QDialog, FORM_CLASS):
             self.includeElevationsCheckBox.setChecked(
                 self.configuration.get_setting('include_elevations', True)
             )
+            
+            # Label Style
+            saved_style_name = self.configuration.get_setting('label_style', LabelStyle.COMPACT.name)
+            style_index = self.labelStyleCombo.findData(LabelStyle[saved_style_name])
+            if style_index >= 0:
+                self.labelStyleCombo.setCurrentIndex(style_index)
+
             self.labelFormatEdit.setText(
                 self.configuration.get_setting('label_format', '{length:.0f}-{diameter:.0f}-{slope:.5f}')
             )
@@ -464,6 +548,10 @@ class MainExportDialog(QDialog, FORM_CLASS):
             self.configuration.set_setting('include_elevations', self.includeElevationsCheckBox.isChecked())
             self.configuration.set_setting('label_format', self.labelFormatEdit.text())
             self.configuration.set_setting('last_output_path', self.outputPathEdit.text())
+            
+            # Save Enums by name
+            self.configuration.set_setting('export_mode', self.exportModeCombo.currentData().name)
+            self.configuration.set_setting('label_style', self.labelStyleCombo.currentData().name)
             
         except Exception as e:
             # If saving fails, continue silently
@@ -592,6 +680,8 @@ class MainExportDialog(QDialog, FORM_CLASS):
             include_arrows=self.includeArrowsCheckBox.isChecked(),
             include_labels=self.includeLabelsCheckBox.isChecked(),
             include_elevations=self.includeElevationsCheckBox.isChecked(),
+            export_node_id=self.exportNodeIdCheckBox.isChecked(),
+            include_slope_unit=self.includeSlopeUnitCheckBox.isChecked(),
             label_format=self.labelFormatEdit.text()
         )
         

@@ -44,6 +44,66 @@ class DXFExporter:
     and field mappings while maintaining QEsg-compatible output structure.
     """
     
+    # === CAD STYLING CONSTANTS ===
+    # Font
+    CAD_FONT = "SIMPLEX"  # Sans-serif CAD font
+    
+    # Colors (RGB tuples)
+    COLOR_ARROW = (152, 152, 152)      # Gray #989898
+    COLOR_PIPE = (166, 166, 255)       # Light blue #a6a6ff
+    COLOR_PIPE_NAME = (255, 97, 0)     # Orange #ff6100
+    COLOR_DEPTH_LENGTH = (140, 140, 140)  # Darker Gray #8c8c8c
+    COLOR_WHITE = (255, 255, 255)      # White for other labels
+    
+    @staticmethod
+    def rgb_to_int(rgb_tuple):
+        """Convert RGB tuple (r, g, b) to 24-bit integer for DXF true_color."""
+        r, g, b = rgb_tuple
+        return (r << 16) | (g << 8) | b
+    
+    @staticmethod
+    def format_mtext_color_rgb(rgb_tuple):
+        """Return MTEXT formatting code for closest ACI Color (R12 compatible): \C<index>;"""
+        # Convert RGB to closest ACI index for R12 compatibility
+        aci = DXFExporter.get_aci_color(rgb_tuple)
+        return f"\\C{aci};"
+
+    @staticmethod
+    def format_mtext_color_aci(aci_index):
+        """Return MTEXT formatting code for ACI Color: \C7;"""
+        return f"\\C{aci_index};"
+        
+    @staticmethod
+    def get_aci_color(rgb_tuple):
+        """Get closest ACI color index from RGB tuple using Euclidean distance."""
+        try:
+            return ezdxf.colors.rgb2aci(rgb_tuple)
+        except AttributeError:
+            # Fallback for older ezdxf versions
+            r, g, b = rgb_tuple
+            
+            # Standard Colors
+            if r == 255 and g == 0 and b == 0: return 1 # Red
+            if r == 255 and g == 255 and b == 0: return 2 # Yellow
+            if r == 0 and g == 255 and b == 0: return 3 # Green
+            if r == 0 and g == 255 and b == 255: return 4 # Cyan
+            if r == 0 and g == 0 and b == 255: return 5 # Blue
+            if r == 255 and g == 0 and b == 255: return 6 # Magenta
+            if r == 255 and g == 255 and b == 255: return 7 # White
+            
+            # Manual mapping for our specific colors
+            if rgb_tuple == (152, 152, 152): return 8   # Dark Gray (Arrow)
+            if rgb_tuple == (140, 140, 140): return 252 # Darker Gray (Depth) - ACI 252
+            if rgb_tuple == (255, 97, 0): return 30     # Orange (Pipe Name)
+            
+            # Simple approximation for grays
+            if r == g == b:
+                if r < 30: return 250
+                if r > 240: return 255
+                return 250 + int((r - 30) / 42) # Maps to 250-255 range partially
+                
+            return 7 # Default to white/adaptive if unknown
+    
     def __init__(self, template_manager: TemplateManager = None, 
                  progress_callback: Optional[callable] = None):
         """
@@ -89,6 +149,13 @@ class DXFExporter:
             if not config.is_valid():
                 errors = config.get_validation_errors()
                 return False, f"Configuration invalid: {'; '.join(errors)}", self.stats
+            
+            # DEBUG: Trace Config via QGIS Message Log
+            QgsMessageLog.logMessage(f"DEBUG EXPORT: config.export_mode = {config.export_mode}", 'RedBasicaExport', Qgis.Info)
+            try:
+                QgsMessageLog.logMessage(f"DEBUG EXPORT: config.export_mode name = {config.export_mode.name}", 'RedBasicaExport', Qgis.Info)
+            except:
+                pass
             
             # Load or create DXF document
             doc = self.template_manager.load_template(config.template_path)
@@ -140,6 +207,14 @@ class DXFExporter:
             True if successful
         """
         try:
+            from .data_structures import ExportMode
+            from .utils.geometry_utils import (
+                get_cad_angle, get_readable_rotation, 
+                get_perpendicular_offset_point, clamp
+            )
+            from qgis.core import QgsPointXY
+
+
             # Get pipes layer
             pipes_layer = self._get_layer_by_id(config.pipes_mapping.layer_id)
             if not pipes_layer:
@@ -172,17 +247,29 @@ class DXFExporter:
                     end_point = coordinates[-1]
                     
                     # Add pipe line with elevation data
+                    # Add pipe line with elevation data
                     self._add_pipe_line(msp, start_point, end_point, pipe_data, pipes_layer_name)
                     
-                    # Add pipe ID label above pipe
-                    if config.include_labels and pipe_data.get('pipe_id'):
-                        self._add_pipe_id_label(msp, start_point, end_point, pipe_data, 
-                                              labels_layer_name, config.scale_factor)
-                    
-                    # Add length-diameter-slope label below pipe
+                    # --- LABELING LOGIC ---
                     if config.include_labels:
-                        self._add_pipe_data_label(msp, start_point, end_point, pipe_data, 
-                                                text_layer_name, config.scale_factor, config.label_format)
+                        if config.export_mode.name == 'STANDARD':
+                            # Legacy TEXT entities
+                            if pipe_data.get('pipe_id'):
+                                self._add_pipe_id_label(msp, start_point, end_point, pipe_data, 
+                                                      labels_layer_name, config.scale_factor)
+                            
+                            self._add_pipe_data_label(msp, start_point, end_point, pipe_data, 
+                                                    text_layer_name, config.scale_factor, config.label_format)
+                        else:
+                            # Enhanced MTEXT entity
+                            # Convert tuples to QgsPointXY for helper
+                            p1 = QgsPointXY(start_point[0], start_point[1])
+                            p2 = QgsPointXY(end_point[0], end_point[1])
+                            self._add_enhanced_pipe_label(
+                                msp, p1, p2, pipe_data, 
+                                text_layer_name, config.scale_factor, config
+                            )
+
                     
                     # Add flow arrow
                     if config.include_arrows:
@@ -216,6 +303,9 @@ class DXFExporter:
             True if successful
         """
         try:
+            from .data_structures import ExportMode
+            from qgis.core import QgsPointXY
+            
             # Get junctions layer
             junctions_layer = self._get_layer_by_id(config.junctions_mapping.layer_id)
             if not junctions_layer:
@@ -246,15 +336,26 @@ class DXFExporter:
                     # Add junction symbol (circle)
                     self._add_junction_symbol(msp, coordinates, junction_data, junctions_layer_name, config.scale_factor)
                     
-                    # Add junction ID label
-                    if junction_data.get('node_id'):
-                        self._add_junction_id_label(msp, coordinates, junction_data, 
-                                                   labels_layer_name, config.scale_factor)
-                    
-                    # Add elevation data block
-                    if config.include_elevations and (junction_data.get('ground_elevation') or junction_data.get('invert_elevation')):
-                        self._add_elevation_block(msp, coordinates, junction_data, 
-                                                elevation_layer_name, config.scale_factor)
+                    # --- LABELING LOGIC ---
+                    if config.export_mode.name == 'STANDARD':
+                        # Legacy TEXT/BLOCK labels
+                        if junction_data.get('node_id'):
+                            self._add_junction_id_label(msp, coordinates, junction_data, 
+                                                       labels_layer_name, config.scale_factor)
+                        
+                        if config.include_elevations and (junction_data.get('ground_elevation') or junction_data.get('invert_elevation')):
+                            self._add_elevation_block(msp, coordinates, junction_data, 
+                                                    elevation_layer_name, config.scale_factor)
+                    else:
+                        # Enhanced MULTILEADER entity
+                        if config.include_elevations or junction_data.get('node_id'):
+                            point_xy = QgsPointXY(coordinates[0], coordinates[1])
+                            self._add_multileader_node_label(
+                                msp, point_xy, junction_data, 
+                                elevation_layer_name, config.scale_factor,
+                                export_node_id=config.export_node_id
+                            )
+
                     
                     # Add extended entity data (XDATA)
                     self._add_junction_xdata(msp, junction_data)
@@ -418,11 +519,11 @@ class DXFExporter:
         """
         # Calculate slope if not provided
         if ('slope' not in pipe_data or pipe_data['slope'] == 0) and all(
-            field in pipe_data for field in ['upstream_invert', 'downstream_invert', 'length']
+            field in pipe_data for field in ['upstream_invert_elev', 'downstream_invert_elev', 'length']
         ):
             try:
-                upstream_invert = float(pipe_data['upstream_invert'])
-                downstream_invert = float(pipe_data['downstream_invert'])
+                upstream_invert = float(pipe_data['upstream_invert_elev'])
+                downstream_invert = float(pipe_data['downstream_invert_elev'])
                 length = float(pipe_data['length'])
                 
                 if length > 0:
@@ -434,16 +535,16 @@ class DXFExporter:
                 pass
         
         # Calculate depths if ground elevations available
-        if all(field in pipe_data for field in ['upstream_ground', 'upstream_invert']):
+        if all(field in pipe_data for field in ['upstream_ground_elev', 'upstream_invert_elev']):
             try:
-                upstream_depth = float(pipe_data['upstream_ground']) - float(pipe_data['upstream_invert'])
+                upstream_depth = float(pipe_data['upstream_ground_elev']) - float(pipe_data['upstream_invert_elev'])
                 pipe_data['upstream_depth'] = max(0, upstream_depth)
             except (ValueError, TypeError):
                 pass
         
-        if all(field in pipe_data for field in ['downstream_ground', 'downstream_invert']):
+        if all(field in pipe_data for field in ['downstream_ground_elev', 'downstream_invert_elev']):
             try:
-                downstream_depth = float(pipe_data['downstream_ground']) - float(pipe_data['downstream_invert'])
+                downstream_depth = float(pipe_data['downstream_ground_elev']) - float(pipe_data['downstream_invert_elev'])
                 pipe_data['downstream_depth'] = max(0, downstream_depth)
             except (ValueError, TypeError):
                 pass
@@ -485,8 +586,8 @@ class DXFExporter:
             layer_name: DXF layer name
         """
         # Get elevations (use invert elevations for 3D coordinates)
-        start_z = pipe_data.get('upstream_invert', 0.0)
-        end_z = pipe_data.get('downstream_invert', 0.0)
+        start_z = pipe_data.get('upstream_invert_elev', 0.0)
+        end_z = pipe_data.get('downstream_invert_elev', 0.0)
         
         # Add 3D line
         line = msp.add_line(
@@ -616,7 +717,7 @@ class DXFExporter:
                 insert=(arrow_x, arrow_y),
                 dxfattribs={
                     'layer': layer_name,
-                    'color': 256,
+                    'color': self.get_aci_color(self.COLOR_ARROW),
                     'xscale': arrow_scale,
                     'yscale': arrow_scale,
                     'rotation': rotation
@@ -820,7 +921,261 @@ class DXFExporter:
                 return layer
         except Exception:
             pass
+        except Exception:
+            pass
         return None
+
+    def _add_enhanced_pipe_label(self, msp, p1: Any, p2: Any, 
+                               pipe_data: Dict[str, Any], layer_name: str, 
+                               scale_factor: float, config: ExportConfiguration):
+        """Add MTEXT label for pipe."""
+        try:
+            from .data_structures import LabelStyle
+            from .utils.geometry_utils import (
+                get_cad_angle, get_readable_rotation,
+                normalize_angle
+            )
+            from ezdxf.enums import MTextEntityAlignment
+            import math
+            
+            # Prepare content
+            name = str(pipe_data.get('pipe_id', '?'))
+            
+            # Format numbers consistently
+            try:    l_val = float(pipe_data.get('length', 0))
+            except: l_val = 0
+            
+            try:    d_val = float(pipe_data.get('diameter', 0))
+            except: d_val = 0
+            
+            try:    s_val = float(pipe_data.get('slope', 0))
+            except: s_val = 0
+            
+            length = f"{l_val:.2f}"
+            diameter = f"Ø{d_val:.0f}"
+            slope = f"{s_val:.4f} m/m" if config.include_slope_unit else f"{s_val:.4f}"
+            
+            # Geometry
+            angle = get_cad_angle(p1, p2)
+            rotation = get_readable_rotation(angle)
+            
+            # Calculate Visual Up Vector based on TEXT rotation (not just line geometry)
+            # Rotation is in degrees. +90 is "Up" relative to text reading direction
+            rad_up = math.radians(rotation + 90)
+            up_x = math.cos(rad_up)
+            up_y = math.sin(rad_up)
+            
+            # Midpoint
+            mid_x = (p1.x() + p2.x()) / 2.0
+            mid_y = (p1.y() + p2.y()) / 2.0
+            
+            text_height = 2.0 * scale_factor / 1000.0
+            
+            # Prepare color codes
+            c_name = self.format_mtext_color_rgb(self.COLOR_PIPE_NAME)
+            c_len = self.format_mtext_color_rgb(self.COLOR_DEPTH_LENGTH)
+            c_adaptive = self.format_mtext_color_aci(7)
+            
+            if config.label_style == LabelStyle.COMPACT:
+                # Split Style: 
+                # Top: Phone ID (Red) - Length (Gray)
+                # Bottom: Diameter Slope (Adaptive)
+                
+                content_top = f"{c_name}{name} {c_adaptive}- {c_len}{length}"
+                content_btm = f"{c_adaptive}{diameter} {slope}"
+                
+                # Offsets
+                # Top text: Anchor BottomCenter. Pos = Mid + padding * Up
+                # Bottom text: Anchor TopCenter. Pos = Mid - padding * Up
+                padding = 1.0 * scale_factor / 1000.0 # 1mm paper gap
+                
+                # Top Entity
+                top_x = mid_x + (up_x * padding)
+                top_y = mid_y + (up_y * padding)
+                
+                mtext_top = msp.add_mtext(
+                    content_top,
+                    dxfattribs={
+                        'layer': layer_name,
+                        'style': self.template_manager.default_text_style,
+                        'char_height': text_height,
+                        'color': 256,
+                        'rotation': rotation,
+                    }
+                )
+                mtext_top.set_location(
+                    insert=(top_x, top_y),
+                    attachment_point=MTextEntityAlignment.BOTTOM_CENTER
+                )
+                
+                # Bottom Entity
+                btm_x = mid_x - (up_x * padding)
+                btm_y = mid_y - (up_y * padding)
+                
+                mtext_btm = msp.add_mtext(
+                    content_btm,
+                    dxfattribs={
+                        'layer': layer_name,
+                        'style': self.template_manager.default_text_style,
+                        'char_height': text_height,
+                        'color': 256,
+                        'rotation': rotation,
+                    }
+                )
+                mtext_btm.set_location(
+                    insert=(btm_x, btm_y),
+                    attachment_point=MTextEntityAlignment.TOP_CENTER
+                )
+                
+            else:
+                # Stacked (4 lines) -> Now 5 lines with gap in middle
+                # We want the middle (empty line) to be ON the pipe line (where arrow is).
+                # So we center the MTEXT on the midpoint with NO OFFSET.
+                
+                # Content: Name(Red) \P Length(Gray) \P (Space) \P Diameter(Adaptive) \P Slope(Adaptive)
+                content = f"{c_name}{name}\\P{c_len}{length}\\P \\P{c_adaptive}{diameter}\\P{c_adaptive}{slope}"
+                
+                # Position = Geometric Midpoint (no offset)
+                pos_x = mid_x
+                pos_y = mid_y
+                
+                mtext = msp.add_mtext(
+                    content,
+                    dxfattribs={
+                        'layer': layer_name,
+                        'style': self.template_manager.default_text_style,
+                        'char_height': text_height,
+                        'color': 256,
+                        'rotation': rotation,
+                    }
+                )
+                mtext.set_location(
+                    insert=(pos_x, pos_y),
+                    attachment_point=MTextEntityAlignment.MIDDLE_CENTER
+                )
+                
+        except Exception as e:
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(f"Error adding MTEXT label: {e}", "RedBasica Export", Qgis.Warning)
+
+
+    def _add_multileader_node_label(self, msp, point: Any, 
+                                  junction_data: Dict[str, Any], layer_name: str, 
+                                  scale_factor: float, export_node_id: bool = False):
+        """
+        Add Multileader label for node using ezdxf 1.4.3 API.
+        
+        Layout (matching reference image):
+        CT: 148.680
+        CF: 147.630   1.050 - col_001-001  (with node ID)
+        CF: 147.630   1.050                (without node ID)
+        
+        Geometry:
+        - 2 segments: diagonal from node, then horizontal to text (dogleg)
+        - No arrow at target
+        - Straight lines (not splines)
+        - Text anchored properly to horizontal segment
+        
+        Args:
+            export_node_id: If True, includes node ID after depth in label.
+        """
+        from qgis.core import QgsMessageLog, Qgis
+        
+        try:
+            from ezdxf.math import Vec2
+            from ezdxf.render import mleader
+            
+            # Extract values with fallbacks
+            try:    ct_val = float(junction_data.get('ground_elevation', 0))
+            except: ct_val = 0
+            
+            try:    cf_val = float(junction_data.get('invert_elevation', 0))
+            except: cf_val = 0
+            
+            # Get depth from data, or calculate from CT - CF
+            try:    prof_val = float(junction_data.get('depth', 0))
+            except: prof_val = 0
+            
+            # If depth is 0 or not provided, calculate from CT - CF
+            if prof_val == 0 and ct_val > 0 and cf_val > 0:
+                prof_val = max(0, ct_val - cf_val)
+            
+            node_id = junction_data.get('node_id', '')
+            
+            # Build content string matching reference layout:
+            # Line 1: CT: xxx.xxx
+            # Line 2: CF: xxx.xxx   Prof (optionally with node ID: Prof - Node_ID)
+            line1 = f"CT: {ct_val:.3f}"
+            if export_node_id and node_id:
+                line2 = f"CF: {cf_val:.3f}   {prof_val:.3f} - {node_id}"
+            else:
+                line2 = f"CF: {cf_val:.3f}   {prof_val:.3f}"
+            content = f"{line1}\\P{line2}"  # Using \P for paragraph break (MTEXT style)
+            
+            # Calculate text height based on scale (2mm at paper scale)
+            char_height = 2.0 * scale_factor / 1000.0
+            
+            # Calculate segment lengths based on scale
+            # segment1: diagonal offset from target (relative vector)
+            # segment2: horizontal dogleg (relative vector from end of segment1)
+            diag_len = 8.0 * scale_factor / 1000.0
+            horiz_len = 5.0 * scale_factor / 1000.0
+            
+            # Target point (where the leader points to - the node)
+            target = Vec2(point.x(), point.y())
+            
+            # Segment 1: diagonal going up-right (relative to target)
+            segment1 = Vec2(diag_len, diag_len)
+            
+            # Segment 2: horizontal going right (relative to end of segment1)
+            segment2 = Vec2(horiz_len, 0)
+            
+            # Create the MULTILEADER builder
+            ml_builder = msp.add_multileader_mtext("Standard")
+            
+            # === CRITICAL SETTINGS ===
+            
+            # 1. Set leader type to STRAIGHT (not splines)
+            ml_builder.set_leader_properties(
+                leader_type=mleader.LeaderType.straight_lines
+            )
+            
+            # 2. Disable arrow by setting size to 0
+            ml_builder.set_arrow_properties(size=0)
+            
+            # 3. Set connection properties for proper dogleg
+            landing_gap = 0.5 * scale_factor / 1000.0
+            ml_builder.set_connection_properties(
+                landing_gap=landing_gap,
+                dogleg_length=horiz_len
+            )
+            
+            # 4. Set content with explicit char_height
+            ml_builder.set_content(
+                content,
+                char_height=char_height,
+                alignment=mleader.TextAlignment.left
+            )
+            
+            # 5. Use quick_leader for proper geometry
+            # HorizontalConnection.left means leader connects to LEFT side of text
+            # So text extends to the RIGHT of the leader end
+            ml_builder.quick_leader(
+                content=content,
+                target=target,
+                segment1=segment1,
+                segment2=segment2,
+                connection_type=mleader.HorizontalConnection.middle_of_text
+            )
+            
+            # Set layer on the created entity
+            if hasattr(ml_builder, 'multileader') and ml_builder.multileader:
+                ml_builder.multileader.dxf.layer = layer_name
+                
+        except Exception as e:
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(f"Error adding MULTILEADER label: {e}", "RedBasica Export", Qgis.Warning)
+
     
     def _reset_stats(self) -> None:
         """Reset export statistics."""
@@ -1070,9 +1425,11 @@ class DXFExporter:
                 if layer_name not in doc.layers:
                     doc.layers.new(layer_name, dxfattribs={'color': color})
                     
-            # Set up text style
+            # Set up text styles
             if 'ROMANS' not in doc.styles:
                 doc.styles.new('ROMANS', dxfattribs={'font': 'romans.shx'})
+            if self.CAD_FONT not in doc.styles:
+                doc.styles.new(self.CAD_FONT, dxfattribs={'font': 'simplex.shx'})
                 
         except Exception as e:
             raise ExportError(f"Failed to setup DXF layers: {e}")
@@ -1450,11 +1807,16 @@ class DXFExporter:
     def _add_pipe_labels(self, msp, line_coords, feature_data: Dict[str, Any], config: ExportConfiguration):
         """Add pipe labels with error handling."""
         try:
-            print(f"DEBUG: _add_pipe_labels ENTRY")
-            print(f"DEBUG: line_coords length: {len(line_coords)}")
-            print(f"DEBUG: feature_data: {feature_data}")
-            print(f"DEBUG: config.layer_prefix: {config.layer_prefix}")
-            print(f"DEBUG: config.scale_factor: {config.scale_factor}")
+            # Use enhanced pipe labels for proper label style (2/4 lines) support
+            # This applies to both STANDARD and ENHANCED modes
+            from qgis.core import QgsPointXY
+            start = QgsPointXY(line_coords[0].x(), line_coords[0].y())
+            end = QgsPointXY(line_coords[-1].x(), line_coords[-1].y())
+            text_layer = f"{config.layer_prefix}TEXTO"
+            self._add_enhanced_pipe_label(msp, start, end, feature_data, text_layer, config.scale_factor, config)
+            
+            print(f"DEBUG: _add_pipe_labels called _add_enhanced_pipe_label")
+            return  # Done - enhanced method handles everything
             
             # QEsg-style scale calculation and text sizing
             sc = config.scale_factor / 2000.0
@@ -1492,8 +1854,8 @@ class DXFExporter:
                 height=text_height,
                 dxfattribs={
                     'rotation': rot,
-                    'style': 'ROMANS',
-                    'color': 256,
+                    'style': self.CAD_FONT,
+                    'color': self.get_aci_color(self.COLOR_PIPE_NAME),
                     'layer': f"{config.layer_prefix}NUMERO"
                 }
             ).set_placement(text_pos, align=TextEntityAlignment.BOTTOM_CENTER)
@@ -1522,8 +1884,8 @@ class DXFExporter:
                 height=text_height,
                 dxfattribs={
                     'rotation': rot,
-                    'style': 'ROMANS', 
-                    'color': 256,
+                    'style': self.CAD_FONT, 
+                    'color': self.get_aci_color(self.COLOR_DEPTH_LENGTH),
                     'layer': f"{config.layer_prefix}TEXTO"
                 }
             ).set_placement(data_pos, align=TextEntityAlignment.TOP_CENTER)
@@ -1539,6 +1901,15 @@ class DXFExporter:
     def _add_junction_labels(self, msp, point, feature_data: Dict[str, Any], config: ExportConfiguration):
         """Add junction labels with error handling."""
         try:
+            # Enhanced Mode Check
+            if config.export_mode.name == 'ENHANCED':
+                from qgis.core import QgsPointXY
+                # point is tuple (x, y, 0)
+                point_xy = QgsPointXY(point[0], point[1])
+                text_layer = f"{config.layer_prefix}TEXTOPVS" # Using elevation layer for multileader
+                self._add_multileader_node_label(msp, point_xy, feature_data, text_layer, config.scale_factor, export_node_id=config.export_node_id)
+                return
+
             print(f"DEBUG: _add_junction_labels ENTRY")
             print(f"DEBUG: point: {point}")
             print(f"DEBUG: feature_data: {feature_data}")
@@ -1604,7 +1975,7 @@ class DXFExporter:
                     arrow_block = msp.doc.blocks.new(name=arrow_block_name)
                     arrow_block.add_solid(
                         [(4*sc, 0), (-4*sc, -1.33*sc), (-4*sc, 1.33*sc)],
-                        dxfattribs={'color': 256, 'layer': arrow_block_name}
+                        dxfattribs={'color': 0, 'layer': '0'}
                     )
                     print(f"DEBUG: Created arrow block: {arrow_block_name}")
                 
@@ -1616,7 +1987,8 @@ class DXFExporter:
                         'xscale': 1,
                         'yscale': 1,
                         'rotation': rot,
-                        'layer': f"{config.layer_prefix}SETA"
+                        'layer': f"{config.layer_prefix}SETA",
+                        'color': self.get_aci_color(self.COLOR_ARROW)
                     }
                 )
                 print(f"DEBUG: Arrow block added successfully")
@@ -1724,9 +2096,9 @@ class DXFExporter:
             print(f"DEBUG: _add_manhole_data_labels ENTRY")
             
             sc = config.scale_factor / 2000.0
-            text_height = 2.5 * sc
-            line_spacing = 1.4 * text_height  # Increased vertical spacing between CT and CF
-            gap = 0.4 * text_height           # Gap between left and right blocks
+            text_height = 2.75 * sc           # Increased by another 5% (total 10% from base)
+            line_spacing = 1.4 * text_height  # Increased accordingly
+            gap = 0.4 * text_height           # Gap
             
             # Get manhole data
             ground_elev = feature_data.get('ground_elevation', 0)
@@ -1740,7 +2112,11 @@ class DXFExporter:
             # Compose strings exactly as specified
             ct_str = f"CT: {ground_elev:.3f}" if ground_elev else ""
             cf_str = f"CF: {invert_elev:.3f}" if invert_elev else ""
-            right_str = f"{calculated_depth:.3f} - {node_id}" if calculated_depth and node_id != 'Unknown' else ""
+            # Right block: depth only, or depth + node_id if export_node_id is enabled
+            if config.export_node_id and node_id != 'Unknown':
+                right_str = f"{calculated_depth:.3f} - {node_id}" if calculated_depth else ""
+            else:
+                right_str = f"{calculated_depth:.3f}" if calculated_depth else ""
             
             print(f"DEBUG: Labels - CT: '{ct_str}', CF: '{cf_str}', Right: '{right_str}'")
             
@@ -1753,8 +2129,9 @@ class DXFExporter:
             print(f"DEBUG: Text widths - CT: {w_ct}, CF: {w_cf}, left_block_w: {left_block_w}")
             
             # Position labels (adjusted for proper alignment)
-            label_offset_x = 15.0 * sc - 7.82  # Adjust 7.82 units left
-            label_offset_y = 4.0 * sc + 1.35   # Adjust 1.35 units up
+            # Increased offsets again to match new text size
+            label_offset_x = 16.5 * sc - 7.82  # (was 15.75)
+            label_offset_y = 4.4 * sc + 1.35   # (was 4.2)
             x_label = point[0] + label_offset_x
             y_label = point[1] + label_offset_y  # Top line baseline (CT position)
             
@@ -1770,8 +2147,8 @@ class DXFExporter:
                     height=text_height,
                     dxfattribs={
                         'rotation': 0,
-                        'style': 'ROMANS',
-                        'color': 1,
+                        'style': self.CAD_FONT,
+                        'color': 7,
                         'layer': f"{config.layer_prefix}TEXTOPVS"
                     }
                 ).set_placement((x_label, y_CT), align=TextEntityAlignment.MIDDLE_LEFT)
@@ -1783,8 +2160,8 @@ class DXFExporter:
                     height=text_height,
                     dxfattribs={
                         'rotation': 0,
-                        'style': 'ROMANS',
-                        'color': 1,
+                        'style': self.CAD_FONT,
+                        'color': 7,
                         'layer': f"{config.layer_prefix}TEXTOPVS"
                     }
                 ).set_placement((x_label, y_CF), align=TextEntityAlignment.MIDDLE_LEFT)
@@ -1801,8 +2178,8 @@ class DXFExporter:
                     height=text_height,
                     dxfattribs={
                         'rotation': 0,
-                        'style': 'ROMANS',
-                        'color': 1,
+                        'style': self.CAD_FONT,
+                        'color': self.get_aci_color(self.COLOR_DEPTH_LENGTH),
                         'layer': f"{config.layer_prefix}TEXTOPVS"
                     }
                 ).set_placement((x_right, y_right), align=TextEntityAlignment.MIDDLE_LEFT)
@@ -1814,7 +2191,7 @@ class DXFExporter:
             
             # Elbow point E - inclined 30° toward label
             import math
-            leader_length = 8.0 * sc
+            leader_length = 8.8 * sc # Increased by another 5%
             angle_rad = math.radians(30)  # 30° inclined segment
             E_x = point[0] + leader_length * math.cos(angle_rad)
             
@@ -1826,11 +2203,16 @@ class DXFExporter:
             L_x = x_label + left_block_w
             L = (L_x, elbow_y, 0)
             
-            # Draw two-segment leader
-            msp.add_line(T, E, dxfattribs={'layer': f"{config.layer_prefix}LIDER", 'color': 1})
-            msp.add_line(E, L, dxfattribs={'layer': f"{config.layer_prefix}LIDER", 'color': 1})
+            # Draw leader as polyline (3 vertices) - easier to edit in CAD
+            msp.add_lwpolyline(
+                [T[:2], E[:2], L[:2]],  # 2D points (x, y)
+                dxfattribs={
+                    'layer': f"{config.layer_prefix}LIDER",
+                        'color': 7,
+                }
+            )
             
-            print(f"DEBUG: Added two-segment leader from {T} to {E} to {L}")
+            print(f"DEBUG: Added polyline leader from {T} to {E} to {L}")
                 
         except Exception as e:
             print(f"DEBUG: Error in _add_manhole_data_labels: {e}")
