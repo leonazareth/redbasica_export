@@ -5,13 +5,14 @@ from typing import Iterable, Sequence, no_type_check
 
 import copy
 from xml.etree import ElementTree as ET
+import numpy as np
 
-from ezdxf.math import Vec2, BoundingBox2d
+from ezdxf.math import Vec2, BoundingBox2d, Matrix44
 from ezdxf.path import Command
 
 
 from .type_hints import Color
-from .backend import BackendInterface, BkPath2d, BkPoints2d
+from .backend import BackendInterface, BkPath2d, BkPoints2d, ImageData
 from .config import Configuration, LineweightPolicy
 from .properties import BackendProperties
 from . import layout, recorder
@@ -28,6 +29,7 @@ class SVGBackend(recorder.Recorder):
     def __init__(self) -> None:
         super().__init__()
         self._init_flip_y = True
+        self.transformation_matrix: Matrix44 | None = None
 
     def get_xml_root_element(
         self,
@@ -38,10 +40,6 @@ class SVGBackend(recorder.Recorder):
     ) -> ET.Element:
         top_origin = True
         settings = copy.copy(settings)
-        # DXF coordinates are mapped to integer viewBox coordinates in the first
-        # quadrant, producing compact SVG files. The larger the coordinate range, the
-        # more precise and the lager the files.
-        settings.output_coordinate_space = 1_000_000
 
         # This player changes the original recordings!
         player = self.player()
@@ -54,11 +52,11 @@ class SVGBackend(recorder.Recorder):
         if page.width == 0 or page.height == 0:
             return ET.Element("svg")  # empty page
 
-        m = output_layout.get_placement_matrix(
+        self.transformation_matrix = output_layout.get_placement_matrix(
             page, settings=settings, top_origin=top_origin
         )
         # transform content to the output coordinates space:
-        player.transform(m)
+        player.transform(self.transformation_matrix)
         if settings.crop_at_margins:
             p1, p2 = page.get_margin_rect(top_origin=top_origin)  # in mm
             # scale factor to map page coordinates to output space coordinates:
@@ -90,9 +88,7 @@ class SVGBackend(recorder.Recorder):
                 in front of the <svg> element
 
         """
-        xml = self.get_xml_root_element(
-            page, settings=settings, render_box=render_box
-        )
+        xml = self.get_xml_root_element(page, settings=settings, render_box=render_box)
         return ET.tostring(xml, encoding="unicode", xml_declaration=xml_declaration)
 
     @staticmethod
@@ -218,7 +214,7 @@ class SVGRenderBackend(BackendInterface):
             height=f"{page.height_in_mm:g}mm",
             viewBox=f"0 0 {view_box_width} {view_box_height}",
         )
-        self.styles = Styles(ET.SubElement(self.root, "def"))
+        self.styles = Styles(ET.SubElement(self.root, "defs"))
         self.background = ET.SubElement(
             self.root,
             "rect",
@@ -318,6 +314,9 @@ class SVGRenderBackend(BackendInterface):
         self.add_filling(
             self.make_polyline_str(points.vertices(), close=True), properties
         )
+
+    def draw_image(self, image_data: ImageData, properties: BackendProperties) -> None:
+        pass  # TODO: not implemented
 
     @staticmethod
     def make_polyline_str(points: Sequence[Vec2], close=False) -> str:

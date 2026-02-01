@@ -1,12 +1,13 @@
-# Copyright (c) 2018-2022 Manfred Moitzi
+# Copyright (c) 2018-2024 Manfred Moitzi
 # License: MIT License
 from __future__ import annotations
 from typing import TYPE_CHECKING, Iterable, Sequence, Iterator, Optional
 import math
+import numpy as np
 
 from ezdxf.math import Vec2, UVec
 from .bbox import BoundingBox2d
-from .construct2d import enclosing_angles, linspace
+from .construct2d import enclosing_angles
 from .circle import ConstructionCircle
 from .line import ConstructionRay, ConstructionLine
 from .ucs import UCS
@@ -96,7 +97,7 @@ class ConstructionArc:
         stop: float = self.end_angle % 360
         if stop <= start:
             stop += 360
-        for angle in linspace(start, stop, num=num, endpoint=True):
+        for angle in np.linspace(start, stop, num=num, endpoint=True):
             yield angle % 360
 
     @property
@@ -140,7 +141,7 @@ class ConstructionArc:
                 stop += 360
             angle_span: float = math.radians(stop - start)
             count = arc_segment_count(radius, angle_span, sagitta)
-            yield from self.vertices(linspace(start, stop, count + 1))
+            yield from self.vertices(np.linspace(start, stop, count + 1))
 
     def tangents(self, a: Iterable[float]) -> Iterable[Vec2]:
         """Yields tangents on arc for angles in iterable `a` in WCS as
@@ -212,9 +213,7 @@ class ConstructionArc:
         start_point = Vec2(start_point)
         end_point = Vec2(end_point)
         if start_point == end_point:
-            raise ValueError(
-                "Start- and end point have to be different points."
-            )
+            raise ValueError("Start- and end point have to be different points.")
         return start_point, end_point
 
     @classmethod
@@ -303,7 +302,7 @@ class ConstructionArc:
         mid_point: Vec2 = _end_point.lerp(_start_point, factor=0.5)
         distance: float = _end_point.distance(_start_point)
         distance2: float = distance / 2.0
-        height: float = math.sqrt(radius ** 2 - distance2 ** 2)
+        height: float = math.sqrt(radius**2 - distance2**2)
         center: Vec2 = mid_point + (_end_point - _start_point).orthogonal(
             ccw=center_is_left
         ).normalize(height)
@@ -341,9 +340,7 @@ class ConstructionArc:
         )
         def_point = Vec2(def_point)
         if def_point == start_point or def_point == end_point:
-            raise ValueError(
-                "def_point has to be different to start- and end point"
-            )
+            raise ValueError("def_point has to be different to start- and end point")
 
         circle = ConstructionCircle.from_3p(start_point, end_point, def_point)
         center = Vec2(circle.center)
@@ -517,7 +514,10 @@ def arc_chord_length(radius: float, sagitta: float) -> float:
         sagitta: distance from the center of the arc to the center of its base
 
     """
-    return 2.0 * math.sqrt(2.0 * radius * sagitta - sagitta * sagitta)
+    try:
+        return 2.0 * math.sqrt(2.0 * radius * sagitta - sagitta * sagitta)
+    except ValueError:
+        return 0.0
 
 
 def arc_segment_count(radius: float, angle: float, sagitta: float) -> int:
@@ -531,6 +531,9 @@ def arc_segment_count(radius: float, angle: float, sagitta: float) -> int:
             center of its chord
 
     """
-    chord_length: float = arc_chord_length(radius, sagitta)
-    alpha: float = math.asin(chord_length / 2.0 / radius) * 2.0
-    return math.ceil(angle / alpha)
+    try:
+        chord_length: float = arc_chord_length(radius, sagitta)
+        alpha: float = math.asin(chord_length / 2.0 / radius) * 2.0
+        return math.ceil(angle / alpha)
+    except (ValueError, ZeroDivisionError):
+        return 1

@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2023 Manfred Moitzi
+# Copyright (c) 2019-2024 Manfred Moitzi
 # License: MIT License
 """ :class:`DXFEntity` is the super class of all DXF entities.
 
@@ -25,7 +25,8 @@ from typing import (
     TypeVar,
     Callable,
 )
-import copy
+from typing_extensions import Self
+
 import logging
 import uuid
 from ezdxf import options
@@ -302,7 +303,7 @@ class DXFEntity:
         # Do not set copy state, this is not a real copy!
         return entity
 
-    def copy(self: T, copy_strategy=default_copy) -> T:
+    def copy(self, copy_strategy=default_copy) -> Self:
         """Internal entity copy for usage in the same document or as virtual entity.
 
         Returns a copy of `self` but without handle, owner and reactors.
@@ -315,7 +316,7 @@ class DXFEntity:
         """
         return copy_strategy.copy(self)
 
-    def copy_data(self, entity: DXFEntity, copy_strategy=default_copy) -> None:
+    def copy_data(self, entity: Self, copy_strategy=default_copy) -> None:
         """Copy entity data like vertices or attribs to the copy of the entity.
 
         This is the second stage of the copy process, see copy() method.
@@ -428,7 +429,7 @@ class DXFEntity:
         """
         blockref = getattr(self, DYN_SOURCE_BLOCK_REFERENCE_ATTRIBUTE, None)
         if blockref is not None and blockref.is_alive:
-            return blockref  # type: ignore
+            return blockref
         return None
 
     def set_source_block_reference(self, blockref: Insert) -> None:
@@ -619,6 +620,10 @@ class DXFEntity:
         del self.doc
         del self.dxf  # check mark for is_alive
 
+    def notify(self, message_type: int, data: Any = None) -> None:
+        """Internal messaging system.  (internal API)"""
+        pass
+
     def preprocess_export(self, tagwriter: AbstractTagWriter) -> bool:
         """Pre requirement check and pre-processing for export.
 
@@ -664,12 +669,12 @@ class DXFEntity:
         if tagwriter.dxfversion >= const.DXF2000:
             tagwriter.write_tag2(_handle_code, self.dxf.handle)
             if self.appdata:
-                self.appdata.export_dxf(tagwriter)  # type: ignore
+                self.appdata.export_dxf(tagwriter)
             if self.has_extension_dict:
                 self.extension_dict.export_dxf(tagwriter)  # type: ignore
             if self.reactors:
-                self.reactors.export_dxf(tagwriter)  # type: ignore
-            tagwriter.write_tag2(const.OWNER_CODE, self.dxf.owner)
+                self.reactors.export_dxf(tagwriter)
+            tagwriter.write_tag2(const.OWNER_CODE, self.dxf.get("owner", "0"))
         else:  # DXF R12
             if tagwriter.write_handles:
                 tagwriter.write_tag2(_handle_code, self.dxf.handle)
@@ -728,17 +733,25 @@ class DXFEntity:
             raise AttributeError("Entity has no extension dictionary.")
 
     def new_extension_dict(self) -> ExtensionDict:
-        """Create a new :class:`~ezdxf.entities.xdict.ExtensionDict` instance ."""
+        """Create a new :class:`~ezdxf.entities.xdict.ExtensionDict` instance."""
         assert self.doc is not None
         xdict = ExtensionDict.new(self.dxf.handle, self.doc)
         self.extension_dict = xdict
         return xdict
 
     def discard_extension_dict(self) -> None:
-        """Delete :class:`~ezdxf.entities.xdict.ExtensionDict` instance ."""
+        """Delete :class:`~ezdxf.entities.xdict.ExtensionDict` instance."""
         if isinstance(self.extension_dict, ExtensionDict):
             self.extension_dict.destroy()
         self.extension_dict = None
+
+    def discard_empty_extension_dict(self) -> None:
+        """Delete :class:`~ezdxf.entities.xdict.ExtensionDict` instance when empty."""
+        if (
+            isinstance(self.extension_dict, ExtensionDict)
+            and len(self.extension_dict) == 0
+        ):
+            self.discard_extension_dict()
 
     def has_app_data(self, appid: str) -> bool:
         """Returns ``True`` if application defined data for `appid` exist."""
@@ -923,7 +936,7 @@ class DXFEntity:
                 for tag in tags.get_hard_owner_handles():
                     registry.add_handle(tag.value)
 
-    def map_resources(self, clone: DXFEntity, mapping: xref.ResourceMapper) -> None:
+    def map_resources(self, clone: Self, mapping: xref.ResourceMapper) -> None:
         """Translate resources from self to the copied entity."""
 
         def map_xdata_resources():
@@ -965,12 +978,12 @@ class DXFTagStorage(DXFEntity):
         self.xtags = ExtendedTags()
         self.embedded_objects: Optional[list[Tags]] = None
 
-    def copy(self: T, copy_strategy=default_copy) -> T:
+    def copy(self, copy_strategy=default_copy) -> Self:
         raise CopyNotSupported(
             f"Copying of tag storage {self.dxftype()} not supported."
         )
 
-    def transform(self, m: Matrix44) -> DXFGraphic:
+    def transform(self, m: Matrix44) -> Self:
         raise NotImplementedError("cannot transform DXF tag storage")
 
     @property
@@ -1069,7 +1082,6 @@ class DXFTagStorage(DXFEntity):
             for e in ProxyGraphic(self.proxy_graphic, self.doc).virtual_entities():
                 e.set_source_of_copy(self)
                 yield e
-        return []
 
     def virtual_entities(self) -> Iterator[DXFGraphic]:
         """Yields proxy graphic as "virtual" entities."""

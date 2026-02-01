@@ -1,7 +1,8 @@
-# Copyright (c) 2018-2023, Manfred Moitzi
+# Copyright (c) 2018-2024, Manfred Moitzi
 # License: MIT License
 from __future__ import annotations
 from typing import TYPE_CHECKING, Union, Optional, Iterable, Any, Iterator
+from typing_extensions import Self
 import copy
 import logging
 import math
@@ -541,7 +542,7 @@ class MultiLeader(DXFGraphic):
         # block attdef entities are included in the block definition!
         self.context.register_resources(registry)
 
-    def map_resources(self, clone: DXFEntity, mapping: xref.ResourceMapper) -> None:
+    def map_resources(self, clone: Self, mapping: xref.ResourceMapper) -> None:
         """Translate resources from self to the copied entity."""
         assert isinstance(clone, MultiLeader)
         super().map_resources(clone, mapping)
@@ -739,7 +740,7 @@ class MLeaderContext:
     def load(cls, context: list[Union[DXFTag, list]]) -> MLeaderContext:
         assert context[0] == (START_CONTEXT_DATA, CONTEXT_STR)
         ctx = cls()
-        content = None
+        content: None | MTextData | BlockData = None
         for tag in context:
             if isinstance(tag, list):  # Leader()
                 ctx.leaders.append(LeaderData.load(tag))
@@ -756,7 +757,7 @@ class MLeaderContext:
                 content = MTextData()
                 ctx.mtext = content
             elif code == 296 and value == 1:
-                content = BlockData()  # type: ignore
+                content = BlockData()
                 ctx.block = content
             else:
                 name = MLeaderContext.ATTRIBS.get(code)
@@ -988,9 +989,7 @@ class MTextData:
         self.column_width *= scale
         self.column_gutter_width *= scale
         self.column_sizes = [size * scale for size in self.column_sizes]
-        self.default_content = scale_mtext_inline_commands(
-            self.default_content, scale
-        )
+        self.default_content = scale_mtext_inline_commands(self.default_content, scale)
 
     def apply_conversion_factor(self, conversion_factor: float):
         # conversion_factor: convert from an old scaling to a new scaling
@@ -1351,7 +1350,7 @@ class MLeaderStyle(DXFObject):
         for attrib_name in MLEADER_STYLE_HANDLE_ATTRIBS:
             registry.add_handle(dxf.get(attrib_name, "0"))
 
-    def map_resources(self, clone: DXFEntity, mapping: xref.ResourceMapper) -> None:
+    def map_resources(self, clone: Self, mapping: xref.ResourceMapper) -> None:
         super().map_resources(clone, mapping)
         dxf = self.dxf
         for attrib_name in MLEADER_STYLE_HANDLE_ATTRIBS:
@@ -1376,7 +1375,7 @@ class MLeaderStyle(DXFObject):
         leader_type: int = 1,
     ):
         assert self.doc is not None, "valid DXF document required"
-        self.dxf.leader_line_color = colors.encode_raw_color(color)  # type: ignore
+        self.dxf.leader_line_color = colors.encode_raw_color(color)
         linetype_ = self.doc.linetypes.get(linetype)
         if linetype_ is None:
             raise ValueError(f"invalid linetype name '{linetype}'")

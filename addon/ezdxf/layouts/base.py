@@ -51,9 +51,6 @@ class _AbstractLayout(CreatorInterface):
         """Returns drawing entity database. (internal API)"""
         return self.doc.entitydb
 
-    def rename(self, name) -> None:
-        pass
-
     def __len__(self) -> int:
         """Returns count of entities owned by the layout."""
         return len(self.entity_space)
@@ -134,7 +131,9 @@ class BaseLayout(_AbstractLayout):
     @property
     def is_active_paperspace(self) -> bool:
         """``True`` if is active layout."""
-        return self.block_record.is_active_paperspace
+        if self.block_record.is_alive:
+            return self.block_record.is_active_paperspace
+        return False
 
     @property
     def is_any_paperspace(self) -> bool:
@@ -185,9 +184,15 @@ class BaseLayout(_AbstractLayout):
 
     def add_entity(self, entity: DXFGraphic) -> None:
         """Add an existing :class:`DXFGraphic` entity to a layout, but be sure
-        to unlink (:meth:`~BaseLayout.unlink_entity`) entity from the previous
-        owner layout. Adding entities from a different DXF drawing is not
+        to unlink (:meth:`~BaseLayout.unlink_entity`) `entity` from the previous
+        owner layout.  Adding entities from a different DXF drawing is not
         supported.
+
+        .. warning:: 
+        
+            This is a low-level tool - use it with caution and make sure you understand 
+            what you are doing! If used improperly, the DXF document may be damaged.
+
         """
         # bind virtual entities to the DXF document:
         doc = self.doc
@@ -345,7 +350,7 @@ class BaseLayout(_AbstractLayout):
                 raise DXFValueError(
                     "Extension dictionary entry ACAD_SORTENTS does not exist."
                 )
-        return sortents_table  #type: ignore
+        return sortents_table
 
     def set_redraw_order(self, handles: Union[dict, Iterable[tuple[str, str]]]) -> None:
         """If the header variable $SORTENTS `Regen` flag (bit-code value 16)
@@ -370,7 +375,7 @@ class BaseLayout(_AbstractLayout):
         """
         sortents = self.get_sortents_table()
         if isinstance(handles, dict):
-            handles = handles.items()  # type: ignore
+            handles = handles.items()
         sortents.set_handles(handles)
 
     def get_redraw_order(self) -> Iterable[tuple[str, str]]:
@@ -387,7 +392,7 @@ class BaseLayout(_AbstractLayout):
             sortents_table = xdict["ACAD_SORTENTS"]
         except DXFKeyError:
             return tuple()
-        return iter(sortents_table)  # type: ignore
+        return iter(sortents_table)
 
     def entities_in_redraw_order(self, reverse=False) -> Iterable[DXFGraphic]:
         """Yields all entities from layout in ascending redraw order or
@@ -414,7 +419,7 @@ class VirtualLayout(_AbstractLayout):
     """
 
     def __init__(self):
-        super().__init__(None)  # type: ignore
+        super().__init__(None)
         self.entity_space = EntitySpace()
 
     @property

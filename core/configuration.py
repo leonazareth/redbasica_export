@@ -613,6 +613,8 @@ class Configuration:
             'include_labels': config.include_labels,
             'include_elevations': config.include_elevations,
             'label_format': config.label_format,
+            'export_mode': config.export_mode.name,
+            'label_style': config.label_style.name,
         }
         
         # Always include pipes_mapping and junctions_mapping, even if None
@@ -641,6 +643,15 @@ class Configuration:
         print(f"DEBUG: _dict_to_export_config called with config_dict type: {type(config_dict)}")
         print(f"DEBUG: config_dict keys: {list(config_dict.keys()) if isinstance(config_dict, dict) else 'NOT A DICT'}")
         
+        # Helper to get enum from string safely
+        def get_enum(enum_cls, value, default):
+            try:
+                return enum_cls[value]
+            except (KeyError, TypeError):
+                return default
+
+        from .data_structures import ExportMode, LabelStyle
+
         config = ExportConfiguration(
             output_path=config_dict.get('output_path', ''),
             scale_factor=config_dict.get('scale_factor', 2000),
@@ -650,6 +661,8 @@ class Configuration:
             include_labels=config_dict.get('include_labels', True),
             include_elevations=config_dict.get('include_elevations', True),
             label_format=config_dict.get('label_format', '{length:.0f}-{diameter:.0f}-{slope:.5f}'),
+            export_mode=get_enum(ExportMode, config_dict.get('export_mode'), ExportMode.STANDARD),
+            label_style=get_enum(LabelStyle, config_dict.get('label_style'), LabelStyle.COMPACT),
         )
         
         if 'pipes_mapping' in config_dict and config_dict['pipes_mapping'] is not None:

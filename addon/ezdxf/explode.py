@@ -73,6 +73,10 @@ def explode_block_reference(
     Attached ATTRIB entities are converted to TEXT entities, this is the
     behavior of the BURST command of the AutoCAD Express Tools.
 
+    This method does not apply the clipping path created by the XCLIP command. 
+    The method returns all entities and ignores the clipping path polygon and no 
+    entity is clipped.
+
     Args:
         block_ref: Block reference entity (INSERT)
         target_layout: explicit target layout for exploded DXF entities
@@ -178,6 +182,10 @@ def virtual_block_reference_entities(
     These entities are located at the 'exploded' positions, but are not stored in
     the entity database, have no handle and are not assigned to any layout.
 
+    This method does not apply the clipping path created by the XCLIP command. 
+    The method returns all entities and ignores the clipping path polygon and no 
+    entity is clipped.
+
     Args:
         block_ref: Block reference entity (INSERT)
         skipped_entity_callback: called whenever the transformation of an entity
@@ -207,12 +215,12 @@ def virtual_block_reference_entities(
                 copy = entity.copy(copy_strategy=copy_strategy)
             except CopyNotSupported:
                 if hasattr(entity, "virtual_entities"):
-                    yield from entity.virtual_entities()  # type: ignore
+                    yield from entity.virtual_entities()
                 else:
-                    skipped_entity_callback(entity, "non copyable")  # type: ignore
+                    skipped_entity_callback(entity, "non copyable")
             else:
                 if hasattr(copy, "remove_association"):
-                    copy.remove_association()  # type: ignore
+                    copy.remove_association()
                 yield copy
 
     def transform(entities):
@@ -319,10 +327,10 @@ def virtual_boundary_path_entities(
 
     def polyline():
         p = LWPolyline.new(dxfattribs=dict(graphic_attribs))
-        p.append_formatted_vertices(path.vertices, format="xyb")  # type: ignore
+        p.append_formatted_vertices(path.vertices, format="xyb")
         p.dxf.extrusion = ocs.uz
         p.dxf.elevation = elevation
-        p.closed = path.is_closed  # type: ignore
+        p.closed = path.is_closed
         return p
 
     graphic_attribs = polygon.graphic_properties()

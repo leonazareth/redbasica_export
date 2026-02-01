@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2023 Manfred Moitzi
+# Copyright (c) 2019-2025 Manfred Moitzi
 # License: MIT License
 from __future__ import annotations
 from typing import (
@@ -10,10 +10,9 @@ from typing import (
     Iterator,
     Optional,
 )
-from typing_extensions import TypeAlias
+from typing_extensions import TypeAlias, Self
 import array
 import copy
-from itertools import chain
 from ezdxf.audit import AuditError
 from ezdxf.lldxf import validator
 from ezdxf.lldxf.attributes import (
@@ -46,8 +45,9 @@ from ezdxf.math import (
     required_fit_points,
     required_control_points,
     fit_points_to_cad_cv,
+    round_knots,
 )
-from .dxfentity import base_class, SubclassProcessor, DXFEntity
+from .dxfentity import base_class, SubclassProcessor
 from .dxfgfx import DXFGraphic, acdb_entity
 from .factory import register_entity
 from .copy import default_copy
@@ -163,7 +163,7 @@ class Spline(DXFGraphic):
         self.knots = []
         self.weights = []
 
-    def copy_data(self, entity: DXFEntity, copy_strategy=default_copy) -> None:
+    def copy_data(self, entity: Self, copy_strategy=default_copy) -> None:
         """Copy data: control_points, fit_points, weights, knot_values."""
         assert isinstance(entity, Spline)
         entity._control_points = copy.deepcopy(self._control_points)
@@ -293,9 +293,7 @@ class Spline(DXFGraphic):
 
     @control_points.setter
     def control_points(self, points: Iterable[UVec]) -> None:
-        self._control_points: Vertices = cast(
-            Vertices, VertexArray(chain.from_iterable(Vec3.generate(points)))
-        )
+        self._control_points: Vertices = cast(Vertices, VertexArray(Vec3.list(points)))
 
     # DXF callback attribute Spline.dxf.n_control_points
     def control_point_count(self) -> int:
@@ -313,7 +311,7 @@ class Spline(DXFGraphic):
     def fit_points(self, points: Iterable[UVec]) -> None:
         self._fit_points: Vertices = cast(
             Vertices,
-            VertexArray(chain.from_iterable(Vec3.generate(points))),
+            VertexArray(Vec3.list(points)),
         )
 
     # DXF callback attribute Spline.dxf.n_fit_points
@@ -325,7 +323,11 @@ class Spline(DXFGraphic):
         """Returns the construction tool :class:`ezdxf.math.BSpline`."""
         if self.control_point_count():
             weights = self.weights if len(self.weights) else None
-            knots = self.knots if len(self.knots) else None
+
+            if len(self.knots):
+                knots = round_knots(self.knots, self.dxf.knot_tolerance)
+            else:
+                knots = None
             return BSpline(
                 control_points=self.control_points,
                 order=self.dxf.degree + 1,

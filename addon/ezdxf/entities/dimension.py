@@ -1,7 +1,9 @@
-# Copyright (c) 2019-2023 Manfred Moitzi
+# Copyright (c) 2019-2024 Manfred Moitzi
 # License: MIT License
 from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, Union, Iterable, Iterator
+from typing_extensions import Self
+
 import math
 import logging
 from ezdxf.audit import AuditError
@@ -276,7 +278,7 @@ class OverrideMixin:
 
         def set_linetype_handle(attrib_name, linetype_name):
             try:
-                ltype = self.doc.linetypes.get(linetype_name)  # type: ignore
+                ltype = self.doc.linetypes.get(linetype_name)
             except DXFTableEntryError:
                 logger.warning(f'Required line type "{linetype_name}" does not exist.')
             else:
@@ -339,7 +341,7 @@ class OverrideMixin:
             if dxf_attr and dxf_attr.code > 0:
                 if dxf_attr.dxfversion > actual_dxfversion:
                     logger.debug(
-                        f'Unsupported DIMSTYLE attribute "{key}" for '  # type: ignore
+                        f'Unsupported DIMSTYLE attribute "{key}" for '
                         f"DXF version {self.doc.acad_release}"  # type: ignore
                     )
                     continue
@@ -412,7 +414,7 @@ class OverrideMixin:
 
         # transform block record handles into block names
         for attrib_name in ("dimblk", "dimblk1", "dimblk2", "dimldrblk"):
-            blkrec_handle = data.pop(attrib_name + "_handle", None)
+            blkrec_handle = data.pop(attrib_name + "_handle", "")
             if blkrec_handle:
                 set_arrow_name(attrib_name, blkrec_handle)
 
@@ -431,7 +433,7 @@ class OverrideMixin:
 
         # transform linetype handles into LTYPE entry names
         for attrib_name in ("dimltype", "dimltex1", "dimltex2"):
-            handle = data.pop(attrib_name + "_handle", None)
+            handle = data.pop(attrib_name + "_handle", "")
             if handle:
                 set_ltype_name(attrib_name, handle)
         return data
@@ -485,13 +487,13 @@ class Dimension(DXFGraphic, OverrideMixin):
         self.virtual_block_content: Optional[EntitySpace] = None
 
     def copy(self, copy_strategy=default_copy) -> Dimension:
-        virtual_copy = super().copy(copy_strategy=copy_strategy)
+        virtual_copy: Dimension = super().copy(copy_strategy=copy_strategy)  # type: ignore
         # The new virtual copy can not reference the same geometry block as the
         # original dimension entity:
         virtual_copy.dxf.discard("geometry")
-        return virtual_copy  # type: ignore
+        return virtual_copy
 
-    def copy_data(self, entity: DXFEntity, copy_strategy=default_copy) -> None:
+    def copy_data(self, entity: Self, copy_strategy=default_copy) -> None:
         assert isinstance(entity, Dimension)
         if self.virtual_block_content:
             # another copy of a virtual entity:
@@ -520,7 +522,7 @@ class Dimension(DXFGraphic, OverrideMixin):
             block = doc.blocks.new_anonymous_block(type_char="D")
             # move virtual block content to the new geometry block:
             for entity in self.virtual_block_content:
-                block.add_entity(entity)  # type: ignore
+                block.add_entity(entity)
             self.dxf.geometry = block.name
             # unlink virtual block content:
             self.virtual_block_content = None
@@ -647,7 +649,7 @@ class Dimension(DXFGraphic, OverrideMixin):
             # overridden resources are referenced by name
             self.override().register_resources_r12(registry)
 
-    def map_resources(self, clone: DXFEntity, mapping: xref.ResourceMapper) -> None:
+    def map_resources(self, clone: Self, mapping: xref.ResourceMapper) -> None:
         super().map_resources(clone, mapping)
         clone.dxf.dimstyle = mapping.get_dim_style(self.dxf.dimstyle)
         clone.dxf.geometry = mapping.get_block_name(self.dxf.geometry)
@@ -802,10 +804,9 @@ class Dimension(DXFGraphic, OverrideMixin):
 
         ocs = self.ocs()
         dim_elevation = self.dxf.text_midpoint.z
-        transform = False
+        m: Matrix44 | None = None
         insert = self.dxf.get("insert", None)
         if insert:
-            transform = True
             insert = Vec3(ocs.to_wcs(insert))
             m = Matrix44.translate(insert.x, insert.y, insert.z)
 
@@ -821,8 +822,8 @@ class Dimension(DXFGraphic, OverrideMixin):
                 # POINT:
                 ocs_to_wcs(copy, dim_elevation)
 
-            if transform:
-                copy.transform(m)  # type: ignore
+            if m is not None:
+                copy.transform(m)
             yield copy
 
     def virtual_entities(self) -> Iterator[DXFGraphic]:
@@ -975,7 +976,7 @@ class ArcDimension(Dimension):
         )
         self.dxf.dimtype = dimtype  # restore original dimtype
 
-    def transform(self, m: Matrix44) -> Dimension:
+    def transform(self, m: Matrix44) -> Self:
         """Transform the ARC_DIMENSION entity by transformation matrix `m` inplace.
 
         Raises ``NonUniformScalingError()`` for non uniform scaling.
@@ -1044,7 +1045,7 @@ class RadialDimensionLarge(Dimension):
             ["chord_point", "override_center", "jog_point", "unknown2"],
         )
 
-    def transform(self, m: Matrix44) -> Dimension:
+    def transform(self, m: Matrix44) -> Self:
         """Transform the LARGE_RADIAL_DIMENSION entity by transformation matrix
         `m` inplace.
 
@@ -1211,8 +1212,8 @@ def linear_measurement(
         # angle in WCS xy-plane
         measurement_direction = Vec3.from_angle(angle)
 
-    t1 = measurement_direction.project(p1)  # type: ignore
-    t2 = measurement_direction.project(p2)  # type: ignore
+    t1 = measurement_direction.project(p1)
+    t2 = measurement_direction.project(p2)
     return (t2 - t1).magnitude
 
 

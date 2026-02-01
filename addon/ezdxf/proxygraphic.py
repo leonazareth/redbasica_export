@@ -62,7 +62,7 @@ def load_proxy_graphic(
         for tag in tags.pop_tags(codes=(length_code, data_code))
         if tag.code == data_code
     ]
-    return b"".join(binary_data) if len(binary_data) else None  # type: ignore
+    return b"".join(binary_data) if len(binary_data) else None
 
 
 def export_proxy_graphic(
@@ -315,7 +315,11 @@ class ProxyGraphic:
         index = self._index
         buffer = self._buffer
         while index < len(buffer):
-            size, type_ = struct.unpack_from("<2L", self._buffer, offset=index)
+            # read 2 unsigned long (8 bytes)
+            size, type_ = struct.unpack_from("<2L", buffer, offset=index)
+            # chunk size has to be >= 8 to advance to the next chunk.
+            if size < 8:
+                raise ValueError("parsing error: chunk size < 8 bytes")
             try:
                 name = ProxyGraphicTypes(type_).name.lower()
             except ValueError:
@@ -447,10 +451,10 @@ class ProxyGraphic:
             # target OCS
             ocs = OCS(normal)
             # convert start angle == UCS x-axis to OCS
-            start_angle = ocs.from_wcs(ucs.to_wcs(X_AXIS)).angle_deg  # type: ignore
+            start_angle = ocs.from_wcs(ucs.to_wcs(X_AXIS)).angle_deg
             # convert end angle to OCS
             end_vec = Vec3.from_angle(sweep_angle)
-            end_angle = ocs.from_wcs(ucs.to_wcs(end_vec)).angle_deg  # type: ignore
+            end_angle = ocs.from_wcs(ucs.to_wcs(end_vec)).angle_deg
             # setup OCS for ARC entity
             attribs["extrusion"] = normal
             # convert WCS center to OCS center
@@ -500,7 +504,7 @@ class ProxyGraphic:
     def _filled_polygon(self, vertices, attribs):
         hatch = cast("Hatch", self._factory("HATCH", dxfattribs=attribs))
         elevation = _get_elevation(vertices)
-        hatch.paths.add_polyline_path(Vec2.generate(vertices), is_closed=True)  # type: ignore
+        hatch.paths.add_polyline_path(Vec2.generate(vertices), is_closed=True)
         if elevation:
             hatch.dxf.elevation = Vec3(0, 0, elevation)
         return hatch

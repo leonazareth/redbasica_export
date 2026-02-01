@@ -2,6 +2,7 @@
 # License: MIT-License
 from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
+from typing_extensions import Self
 from ezdxf.lldxf.const import SUBCLASS_MARKER, DXFStructureError
 from ezdxf.lldxf.attributes import (
     DXFAttributes,
@@ -35,7 +36,7 @@ class IDBuffer(DXFObject):
         super().__init__()
         self.handles: list[str] = []
 
-    def copy_data(self, entity: DXFEntity, copy_strategy=default_copy) -> None:
+    def copy_data(self, entity: Self, copy_strategy=default_copy) -> None:
         """Copy handles"""
         assert isinstance(entity, IDBuffer)
         entity.handles = list(self.handles)
@@ -94,7 +95,7 @@ class FieldList(IDBuffer):
                 )
             processor.fast_load_dxfattribs(dxf, acdb_id_set_group_codes, 1)
             # Load field list:
-            self.load_handles(processor.subclasses[2])
+            self.load_handles(processor.subclasses[1])
         return dxf
 
     def export_entity(self, tagwriter: AbstractTagWriter) -> None:
@@ -102,8 +103,8 @@ class FieldList(IDBuffer):
         super(DXFObject, self).export_entity(tagwriter)
         tagwriter.write_tag2(SUBCLASS_MARKER, acdb_id_set.name)
         self.dxf.export_dxf_attribs(tagwriter, "flags")
-        tagwriter.write_tag2(SUBCLASS_MARKER, acdb_field_list.name)
         self.export_handles(tagwriter)
+        tagwriter.write_tag2(SUBCLASS_MARKER, acdb_field_list.name)
 
 
 acdb_filter = DefSubclass("AcDbFilter", {})

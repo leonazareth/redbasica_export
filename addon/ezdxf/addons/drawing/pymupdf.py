@@ -1,28 +1,34 @@
 #  Copyright (c) 2023, Manfred Moitzi
 #  License: MIT License
 from __future__ import annotations
-from typing import Iterable, no_type_check
+
+import math
+from typing import Iterable, no_type_check, Any
 import copy
+
+import PIL.Image
+import numpy as np
 
 from ezdxf.math import Vec2, BoundingBox2d
 from ezdxf.colors import RGB
 from ezdxf.path import Command
 from ezdxf.version import __version__
+from ezdxf.lldxf.validator import make_table_key as layer_key
 
 from .type_hints import Color
-from .backend import BackendInterface, BkPath2d, BkPoints2d
+from .backend import BackendInterface, BkPath2d, BkPoints2d, ImageData
 from .config import Configuration, LineweightPolicy
 from .properties import BackendProperties
 from . import layout, recorder
 
 is_pymupdf_installed = True
+pymupdf: Any = None
 try:
-    import fitz
+    import pymupdf  # type: ignore[import-untyped, no-redef]
 except ImportError:
     print(
         "Python module PyMuPDF (AGPL!) is required: https://pypi.org/project/PyMuPDF/"
     )
-    fitz = None
     is_pymupdf_installed = False
 # PyMuPDF docs: https://pymupdf.readthedocs.io/en/latest/
 
@@ -54,7 +60,7 @@ class PyMuPdfBackend(recorder.Recorder):
         super().__init__()
         self._init_flip_y = True
 
-    def _get_replay(
+    def get_replay(
         self,
         page: layout.Page,
         *,
@@ -114,7 +120,7 @@ class PyMuPdfBackend(recorder.Recorder):
             settings: layout settings, see :class:`~ezdxf.addons.drawing.layout.Settings`
             render_box: set explicit region to render, default is content bounding box
         """
-        backend = self._get_replay(page, settings=settings, render_box=render_box)
+        backend = self.get_replay(page, settings=settings, render_box=render_box)
         return backend.get_pdf_bytes()
 
     def get_pixmap_bytes(
@@ -145,7 +151,7 @@ class PyMuPdfBackend(recorder.Recorder):
         """
         if fmt not in SUPPORTED_IMAGE_FORMATS:
             raise ValueError(f"unsupported image format: '{fmt}'")
-        backend = self._get_replay(page, settings=settings, render_box=render_box)
+        backend = self.get_replay(page, settings=settings, render_box=render_box)
         try:
             pixmap = backend.get_pixmap(dpi=dpi, alpha=alpha)
             return pixmap.tobytes(output=fmt)
@@ -189,16 +195,17 @@ class PyMuPdfRenderBackend(BackendInterface):
         assert (
             is_pymupdf_installed
         ), "Python module PyMuPDF is required: https://pypi.org/project/PyMuPDF/"
-        self.doc = fitz.open()
+        self.doc = pymupdf.open()
         self.doc.set_metadata(
             {
-                "producer": f"PyMuPDF {fitz.version[0]}",
+                "producer": f"PyMuPDF {pymupdf.version[0]}",
                 "creator": f"ezdxf {__version__}",
             }
         )
         self.settings = settings
-        self._stroke_width_cache: dict[float, float] = dict()
-        self._color_cache: dict[str, tuple[float, float, float]] = dict()
+        self._optional_content_groups: dict[str, int] = {}
+        self._stroke_width_cache: dict[float, float] = {}
+        self._color_cache: dict[str, tuple[float, float, float]] = {}
         self.page_width_in_pt = int(page.width_in_mm * MM_TO_POINTS)
         self.page_height_in_pt = int(page.height_in_mm * MM_TO_POINTS)
         # LineweightPolicy.ABSOLUTE:
@@ -227,14 +234,17 @@ class PyMuPdfRenderBackend(BackendInterface):
             int(self.max_stroke_width * settings.fixed_stroke_width),
         )
         self.page = self.doc.new_page(-1, self.page_width_in_pt, self.page_height_in_pt)
-
+        # The page content is stored in a shared shape:
+        self.content_shape = self.page.new_shape()
+        # see also: https://github.com/pymupdf/PyMuPDF/issues/3800
+        
     def get_pdf_bytes(self) -> bytes:
         return self.doc.tobytes()
 
     def get_pixmap(self, dpi: int, alpha=False):
         return self.page.get_pixmap(dpi=dpi, alpha=alpha)
 
-    def get_svg_image(self) -> bytes:
+    def get_svg_image(self) -> str:
         return self.page.get_svg_image()
 
     def set_background(self, color: Color) -> None:
@@ -242,13 +252,22 @@ class PyMuPdfRenderBackend(BackendInterface):
         opacity = alpha_to_opacity(color[7:9])
         if color == (1.0, 1.0, 1.0) or opacity == 0.0:
             return
-        shape = self.new_shape()
+        shape = self.content_shape
         shape.draw_rect([0, 0, self.page_width_in_pt, self.page_height_in_pt])
         shape.finish(width=None, color=None, fill=rgb, fill_opacity=opacity)
         shape.commit()
 
-    def new_shape(self):
-        return self.page.new_shape()
+    def get_optional_content_group(self, layer_name: str) -> int:
+        if not self.settings.output_layers:
+            return 0  # the default value of `oc` when not provided
+        layer_name = layer_key(layer_name)
+        if layer_name not in self._optional_content_groups:
+            self._optional_content_groups[layer_name] = self.doc.add_ocg(
+                name=layer_name,
+                config=-1,
+                on=True,
+            )
+        return self._optional_content_groups[layer_name]
 
     def finish_line(self, shape, properties: BackendProperties, close: bool) -> None:
         color = self.resolve_color(properties.color)
@@ -261,6 +280,7 @@ class PyMuPdfRenderBackend(BackendInterface):
             lineCap=1,
             stroke_opacity=alpha_to_opacity(properties.color[7:9]),
             closePath=close,
+            oc=self.get_optional_content_group(properties.layer),
         )
 
     def finish_filling(self, shape, properties: BackendProperties) -> None:
@@ -273,6 +293,7 @@ class PyMuPdfRenderBackend(BackendInterface):
             lineCap=1,
             closePath=True,
             even_odd=True,
+            oc=self.get_optional_content_group(properties.layer),
         )
 
     def resolve_color(self, color: Color) -> tuple[float, float, float]:
@@ -304,55 +325,98 @@ class PyMuPdfRenderBackend(BackendInterface):
         return stroke_width
 
     def draw_point(self, pos: Vec2, properties: BackendProperties) -> None:
-        shape = self.new_shape()
+        shape = self.content_shape
         pos = Vec2(pos)
         shape.draw_line(pos, pos)
         self.finish_line(shape, properties, close=False)
-        shape.commit()
 
     def draw_line(self, start: Vec2, end: Vec2, properties: BackendProperties) -> None:
-        shape = self.new_shape()
+        shape = self.content_shape
         shape.draw_line(Vec2(start), Vec2(end))
         self.finish_line(shape, properties, close=False)
-        shape.commit()
 
     def draw_solid_lines(
         self, lines: Iterable[tuple[Vec2, Vec2]], properties: BackendProperties
     ) -> None:
-        shape = self.new_shape()
+        shape = self.content_shape
         for start, end in lines:
             shape.draw_line(start, end)
         self.finish_line(shape, properties, close=False)
-        shape.commit()
 
     def draw_path(self, path: BkPath2d, properties: BackendProperties) -> None:
         if len(path) == 0:
             return
-        shape = self.new_shape()
+        shape = self.content_shape
         add_path_to_shape(shape, path, close=False)
         self.finish_line(shape, properties, close=False)
-        shape.commit()
 
     def draw_filled_paths(
         self, paths: Iterable[BkPath2d], properties: BackendProperties
     ) -> None:
-        shape = self.new_shape()
+        shape = self.content_shape
         for p in paths:
             add_path_to_shape(shape, p, close=True)
         self.finish_filling(shape, properties)
-        shape.commit()
 
     def draw_filled_polygon(
         self, points: BkPoints2d, properties: BackendProperties
     ) -> None:
-        vertices = points.vertices()
+        vertices = points.to_list()
         if len(vertices) < 3:
             return
+        # pymupdf >= 1.23.19 does not accept Vec2() instances
         # input coordinates are page coordinates in pdf units
-        shape = self.new_shape()
+        shape = self.content_shape
         shape.draw_polyline(vertices)
         self.finish_filling(shape, properties)
-        shape.commit()
+
+    def draw_image(self, image_data: ImageData, properties: BackendProperties) -> None:
+        transform = image_data.transform
+        image = image_data.image
+        height, width, depth = image.shape
+        assert depth == 4
+
+        corners = list(
+            transform.transform_vertices(
+                [Vec2(0, 0), Vec2(width, 0), Vec2(width, height), Vec2(0, height)]
+            )
+        )
+        xs = [p.x for p in corners]
+        ys = [p.y for p in corners]
+        r = pymupdf.Rect((min(xs), min(ys)), (max(xs), max(ys)))
+
+        # translation and non-uniform scale are handled by having the image stretch to fill the given rect.
+        angle = (corners[1] - corners[0]).angle_deg
+        need_rotate = not math.isclose(angle, 0.0)
+        # already mirroring once to go from pixels (+y down) to wcs (+y up)
+        # so a positive determinant means an additional reflection
+        need_flip = transform.determinant() > 0
+
+        if need_rotate or need_flip:
+            pil_image = PIL.Image.fromarray(image, mode="RGBA")
+            if need_flip:
+                pil_image = pil_image.transpose(PIL.Image.Transpose.FLIP_TOP_BOTTOM)
+            if need_rotate:
+                pil_image = pil_image.rotate(
+                    -angle,
+                    resample=PIL.Image.Resampling.BICUBIC,
+                    expand=True,
+                    fillcolor=(0, 0, 0, 0),
+                )
+            image = np.asarray(pil_image)
+            height, width, depth = image.shape
+
+        pixmap = pymupdf.Pixmap(
+            pymupdf.Colorspace(pymupdf.CS_RGB), width, height, bytes(image.data), True
+        )
+        # TODO: could improve by caching and re-using xrefs. If a document contains many
+        #  identical images redundant copies will be stored for each one
+        self.page.insert_image(
+            r,
+            keep_proportion=False,
+            pixmap=pixmap,
+            oc=self.get_optional_content_group(properties.layer),
+        )
 
     def configure(self, config: Configuration) -> None:
         self.lineweight_policy = config.lineweight_policy
@@ -366,7 +430,7 @@ class PyMuPdfRenderBackend(BackendInterface):
         pass
 
     def finalize(self) -> None:
-        pass
+        self.content_shape.commit()
 
     def enter_entity(self, entity, properties) -> None:
         pass

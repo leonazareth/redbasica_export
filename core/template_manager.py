@@ -194,8 +194,8 @@ class TemplateManager:
         Returns:
             ezdxf Drawing document with default setup
         """
-        # Create new DXF document
-        doc = ezdxf.new('R2018')  # Modern DXF version
+        # Create new DXF document - setup=True creates MLEADERSTYLE for MULTILEADER support
+        doc = ezdxf.new('R2018', setup=True)
         
         # Set up units (meters)
         doc.units = units.M

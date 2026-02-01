@@ -1,9 +1,11 @@
-# Copyright (c) 2019-2023 Manfred Moitzi
+# Copyright (c) 2019-2024 Manfred Moitzi
 # License: MIT License
 from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 from typing_extensions import Self
 import copy
+
+from ezdxf.audit import Auditor, AuditError
 from ezdxf.lldxf import validator
 from ezdxf.math import NULLVEC, Vec3, Z_AXIS, OCS, Matrix44
 from ezdxf.lldxf.attributes import (
@@ -40,7 +42,6 @@ from .copy import default_copy
 if TYPE_CHECKING:
     from ezdxf.lldxf.tagwriter import AbstractTagWriter
     from ezdxf.lldxf.tags import Tags
-    from ezdxf.entities import DXFEntity
     from ezdxf import xref
 
 
@@ -81,6 +82,7 @@ attrib_fields = {
     # ezdxf stores the last group code 280 as "lock_position" attribute and does
     # not export a version tag for any DXF version.
     # Tag string (cannot contain spaces):
+    # Mandatory by AutoCAD!
     "tag": DXFAttr(
         2,
         default="",
@@ -118,7 +120,7 @@ attrib_fields = {
     # 4 = multiline ATTDEF
     "attribute_type": DXFAttr(
         71,
-        default=1,
+        default=const.ATTRIB_TYPE_SINGLE_LINE,
         dxfversion=const.DXF2018,
         optional=True,
         validator=validator.is_one_of({1, 2, 4}),
@@ -218,7 +220,7 @@ class BaseAttrib(Text):
         self._xrecord: Optional[Tags] = None
         self._embedded_mtext: Optional[EmbeddedMText] = None
 
-    def copy_data(self, entity: DXFEntity, copy_strategy=default_copy) -> None:
+    def copy_data(self, entity: Self, copy_strategy=default_copy) -> None:
         """Copy entity data, xrecord data and embedded MTEXT are not stored
         in the entity database.
         """
@@ -345,6 +347,14 @@ class BaseAttrib(Text):
         self._embedded_mtext.set_mtext(mtext)
         _update_content_from_mtext(self, mtext)
         _update_location_from_mtext(self, mtext)
+
+        # set attribute type:
+        if isinstance(self, Attrib):
+            attribute_type = const.ATTRIB_TYPE_MULTI_LINE
+        else:
+            attribute_type = const.ATTDEF_TYPE_MULTI_LINE
+        self.dxf.attribute_type = attribute_type
+
         # misc properties
         self.dxf.style = mtext.dxf.style
         self.dxf.height = mtext.dxf.char_height
@@ -356,7 +366,7 @@ class BaseAttrib(Text):
 
     def embed_mtext(self, mtext: MText, graphic_properties=True) -> None:
         """Set multi-line properties from a :class:`MText` entity and destroy the
-        source entity afterwards.
+        source entity afterward.
 
         The multi-line ATTRIB/ATTDEF entity requires DXF R2018, otherwise an
         ordinary single line ATTRIB/ATTDEF entity will be exported.
@@ -370,13 +380,22 @@ class BaseAttrib(Text):
         self.set_mtext(mtext, graphic_properties)
         mtext.destroy()
 
+    def discard_mtext(self) -> None:
+        """Discard multi-line feature.
+
+        The embedded MTEXT will be removed and the ATTRIB/ATTDEF will be converted to a
+        single-line attribute.
+        """
+        self._embedded_mtext = None
+        self.dxf.attribute_type = const.ATTRIB_TYPE_SINGLE_LINE
+
     def register_resources(self, registry: xref.Registry) -> None:
         """Register required resources to the resource registry."""
         super().register_resources(registry)
         if self._embedded_mtext:
             self._embedded_mtext.register_resources(registry)
 
-    def map_resources(self, clone: DXFEntity, mapping: xref.ResourceMapper) -> None:
+    def map_resources(self, clone: Self, mapping: xref.ResourceMapper) -> None:
         """Translate resources from self to the copied entity."""
         assert isinstance(clone, BaseAttrib)
         super().map_resources(clone, mapping)
@@ -393,6 +412,16 @@ class BaseAttrib(Text):
             self.set_mtext(mtext, graphic_properties=False)
             self.post_transform(m)
         return self
+
+    def audit(self, auditor: Auditor) -> None:
+        """Validity check."""
+        super().audit(auditor)
+        if not self.dxf.hasattr("tag"):
+            auditor.fixed_error(
+                code=AuditError.TAG_ATTRIBUTE_MISSING,
+                message=f'Missing mandatory "tag" attribute, entity {str(self)} deleted.',
+            )
+            auditor.trash(self)
 
 
 def _update_content_from_mtext(text: Text, mtext: MText) -> None:
@@ -416,7 +445,7 @@ def _update_location_from_mtext(text: Text, mtext: MText) -> None:
         ocs = OCS(extrusion)
         insert = ocs.from_wcs(insert)
         dxf.extrusion = extrusion.normalize()
-        dxf.rotation = ocs.from_wcs(text_direction).angle_deg  # type: ignore
+        dxf.rotation = ocs.from_wcs(text_direction).angle_deg
 
     dxf.insert = insert
     dxf.align_point = insert  # the same point for all MTEXT alignments!
@@ -457,7 +486,6 @@ class AttDef(BaseAttrib):
         self.export_acdb_text(tagwriter)
         self.export_acdb_attdef(tagwriter)
         if tagwriter.dxfversion >= const.DXF2018:
-            self.dxf.attribute_type = 4 if self.has_embedded_mtext_entity else 1
             self.export_dxf_r2018_features(tagwriter)
 
     def export_acdb_attdef(self, tagwriter: AbstractTagWriter) -> None:
@@ -508,7 +536,6 @@ class Attrib(BaseAttrib):
         self.export_acdb_attrib_text(tagwriter)
         self.export_acdb_attrib(tagwriter)
         if tagwriter.dxfversion >= const.DXF2018:
-            self.dxf.attribute_type = 2 if self.has_embedded_mtext_entity else 1
             self.export_dxf_r2018_features(tagwriter)
 
     def export_acdb_attrib_text(self, tagwriter: AbstractTagWriter) -> None:

@@ -938,7 +938,7 @@ class MultiLeaderBuilder(abc.ABC):
             multileader.dxf.dogleg_length = dogleg_length * scale
         else:
             multileader.dxf.has_dogleg = 0
-        multileader.context.landing_gap_size * landing_gap * scale
+        multileader.context.landing_gap_size = landing_gap * scale
 
     def set_connection_types(
         self,
@@ -1018,7 +1018,7 @@ class MultiLeaderBuilder(abc.ABC):
 
         """
         mleader = self._multileader
-        mleader.dxf.leader_line_color = colors.encode_raw_color(color)  # type: ignore
+        mleader.dxf.leader_line_color = colors.encode_raw_color(color)
         linetype_ = self._doc.linetypes.get(linetype)
         if linetype_ is None:
             raise ValueError(f"invalid linetype name '{linetype}'")

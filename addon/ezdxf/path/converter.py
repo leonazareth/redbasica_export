@@ -13,6 +13,8 @@ from typing import (
 )
 from typing_extensions import TypeAlias
 from functools import singledispatch, partial
+import logging
+
 from ezdxf.math import (
     ABS_TOL,
     Vec2,
@@ -85,6 +87,7 @@ MIN_SEGMENTS = 4
 G1_TOL = 1e-4
 TPolygon = TypeVar("TPolygon", Hatch, MPolygon)
 BoundaryFactory = Callable[[BoundaryPaths, Path, int], None]
+logger = logging.getLogger("ezdxf")
 
 
 @singledispatch
@@ -246,10 +249,15 @@ def _from_hatch(hatch: Hatch, **kwargs) -> Path:
     offset = NULLVEC
     if isinstance(hatch, MPolygon):
         offset = hatch.dxf.get("offset_vector", NULLVEC)
-    paths = [
-        from_hatch_boundary_path(boundary, ocs, elevation, offset=offset)
-        for boundary in hatch.paths
-    ]
+    try:
+        paths = [
+            from_hatch_boundary_path(boundary, ocs, elevation, offset=offset)
+            for boundary in hatch.paths
+        ]
+    except const.DXFStructureError:  
+        # TODO: fix problems beforehand in audit process? see issue #1081
+        logger.warning(f"invalid data in {str(hatch)}")
+        return Path()
     # looses the boundary path state:
     return tools.to_multi_path(paths)
 
@@ -465,14 +473,14 @@ def from_hatch_edge_path(
         elif loop.start.isclose(next_segment.start):
             # start of the current loop connects to the start of the next segment
             loop = loop.reversed()
-            loop.append_path(next_segment)  # type: ignore
+            loop.append_path(next_segment)
         else:  # gap between current loop and next segment
             if loop.is_closed:  # start a new loop
                 path.extend_multi_path(loop)
                 loop = next_segment  # start a new loop
             # behavior changed in version v0.18 based on issue #706:
             else:  # close the gap by a straight line and append the segment
-                loop.append_path(next_segment)  # type: ignore
+                loop.append_path(next_segment)
 
     if loop is not None:
         loop.close()
@@ -525,7 +533,7 @@ def to_lwpolylines(
     else:
         paths = list(paths)
     if len(paths) == 0:
-        return []
+        return
     extrusion = Vec3(extrusion)
     reference_point = Vec3(paths[0].start)
     dxfattribs = dict(dxfattribs or {})
@@ -537,16 +545,16 @@ def to_lwpolylines(
     elif reference_point.z != 0:
         dxfattribs["elevation"] = reference_point.z
 
-    for path in tools.single_paths(paths):  # type: ignore
+    for path in tools.single_paths(paths):
         if len(path) > 0:
             p = LWPolyline.new(dxfattribs=dxfattribs)
-            p.append_points(path.flattening(distance, segments), format="xy")  # type: ignore
+            p.append_points(path.flattening(distance, segments), format="xy")
             yield p
 
 
 def _get_ocs(extrusion: Vec3, reference_point: Vec3) -> tuple[OCS, float]:
     ocs = OCS(extrusion)
-    elevation = ocs.from_wcs(reference_point).z  # type: ignore
+    elevation = ocs.from_wcs(reference_point).z
     return ocs, elevation
 
 
@@ -581,7 +589,7 @@ def to_polylines2d(
     else:
         paths = list(paths)
     if len(paths) == 0:
-        return []
+        return
     extrusion = Vec3(extrusion)
     reference_point = Vec3(paths[0].start)
     dxfattribs = dict(dxfattribs or {})
@@ -593,7 +601,7 @@ def to_polylines2d(
     elif reference_point.z != 0:
         dxfattribs["elevation"] = Vec3(0, 0, reference_point.z)
 
-    for path in tools.single_paths(paths):  # type: ignore
+    for path in tools.single_paths(paths):
         if len(path) > 0:
             p = Polyline.new(dxfattribs=dxfattribs)
             p.append_vertices(path.flattening(distance, segments))
@@ -645,9 +653,7 @@ def to_hatches(
             build_poly_path, distance=distance, segments=segments
         )
 
-    yield from _polygon_converter(
-        Hatch, paths, boundary_factory, extrusion, dxfattribs
-    )
+    yield from _polygon_converter(Hatch, paths, boundary_factory, extrusion, dxfattribs)
 
 
 def to_mpolygons(
@@ -683,7 +689,7 @@ def to_mpolygons(
         build_poly_path, distance=distance, segments=segments
     )
     dxfattribs = dict(dxfattribs or {})
-    dxfattribs.setdefault("fill_color", const.BYLAYER)  # type: ignore
+    dxfattribs.setdefault("fill_color", const.BYLAYER)
 
     yield from _polygon_converter(
         MPolygon, paths, boundary_factory, extrusion, dxfattribs
@@ -744,7 +750,7 @@ def _polygon_converter(
     else:
         paths = list(paths)
     if len(paths) == 0:
-        return []
+        return
 
     extrusion = Vec3(extrusion)
     reference_point = paths[0].start
@@ -767,10 +773,10 @@ def _polygon_converter(
         boundaries = polygon.paths
         external = group[0]
         external.close()
-        add_boundary(boundaries, external, 1)  # type: ignore
+        add_boundary(boundaries, external, 1)
         for hole in group[1:]:
             hole.close()
-            add_boundary(boundaries, hole, 0)  # type: ignore
+            add_boundary(boundaries, hole, 0)
         yield polygon
 
 
@@ -799,7 +805,7 @@ def to_polylines3d(
 
     dxfattribs = dict(dxfattribs or {})
     dxfattribs["flags"] = const.POLYLINE_3D_POLYLINE
-    for path in tools.single_paths(paths):  # type: ignore
+    for path in tools.single_paths(paths):
         if len(path) > 0:
             p = Polyline.new(dxfattribs=dxfattribs)
             p.append_vertices(path.flattening(distance, segments))
@@ -830,7 +836,7 @@ def to_lines(
         paths = [paths]
     dxfattribs = dict(dxfattribs or {})
     prev_vertex = None
-    for path in tools.single_paths(paths):  # type: ignore
+    for path in tools.single_paths(paths):
         if len(path) == 0:
             continue
         for vertex in path.flattening(distance, segments):
@@ -883,7 +889,7 @@ def to_bsplines_and_vertices(path: Path, g1_tol: float = G1_TOL) -> Iterator[Pat
             yield bezier_to_bspline(_g1_continuity_curves)
 
     curves = []
-    for path in tools.single_paths([path]):  # type: ignore
+    for path in tools.single_paths([path]):
         prev = path.start
         for cmd in path:
             if cmd.type == Command.CURVE3_TO:
@@ -939,7 +945,7 @@ def to_splines_and_polylines(
         paths = [paths]
     dxfattribs = dict(dxfattribs or {})
 
-    for path in tools.single_paths(paths):  # type: ignore
+    for path in tools.single_paths(paths):
         for data in to_bsplines_and_vertices(path, g1_tol):
             if isinstance(data, BSpline):
                 spline = Spline.new(dxfattribs=dxfattribs)

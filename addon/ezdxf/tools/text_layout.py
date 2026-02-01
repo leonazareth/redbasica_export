@@ -207,14 +207,12 @@ class ContentRenderer(abc.ABC):
             m: transformation Matrix44
 
         """
-        pass
 
     @abc.abstractmethod
     def line(
         self, x1: float, y1: float, x2: float, y2: float, m: Matrix44 = None
     ) -> None:
         """Draw a line from (x1, y1) to (x2, y2)."""
-        pass
 
 
 class DoNothingRenderer(ContentRenderer):
@@ -245,11 +243,11 @@ def resolve_margins(margins: Optional[Sequence[float]]) -> Tuple4f:
     count = len(margins)
     if count == 4:  # CSS: top, right, bottom, left
         return margins[0], margins[1], margins[2], margins[3]
-    elif count == 3:  # CSS: top, right, bottom, left=right
+    if count == 3:  # CSS: top, right, bottom, left=right
         return margins[0], margins[1], margins[2], margins[1]
-    elif count == 2:  # CSS: top, right, bottom=top, left=right
+    if count == 2:  # CSS: top, right, bottom=top, left=right
         return margins[0], margins[1], margins[0], margins[1]
-    elif count == 1:  # CSS: top, right=top, bottom=top, left=top
+    if count == 1:  # CSS: top, right=top, bottom=top, left=top
         return margins[0], margins[0], margins[0], margins[0]
     return 0, 0, 0, 0
 
@@ -284,32 +282,27 @@ def insert_location(align: LayoutAlignment, width: float, height: float) -> Tupl
 class Box(abc.ABC):
     @property
     @abc.abstractmethod
-    def total_width(self) -> float:
-        pass
+    def total_width(self) -> float: ...
 
     @property
     @abc.abstractmethod
-    def total_height(self) -> float:
-        pass
+    def total_height(self) -> float: ...
 
     @abc.abstractmethod
     def place(self, x: float, y: float):
         """(x, y) is the top/left corner"""
-        pass
 
     @abc.abstractmethod
     def final_location(self) -> tuple[float, float]:
         """Returns the final location as the top/left corner"""
-        pass
 
     @abc.abstractmethod
     def render(self, m: Matrix44 = None) -> None:
         """Render content at the final location."""
-        pass
 
     def bbox(self) -> BoundingBox2d:
-        """Returns the 2D bounding box of the container. If the cell is
-        not placed the top/left corner = (0, 0).
+        """Returns the 2D bounding box of the container. If the cell is not placed the 
+        top/left corner is (0, 0).
 
         """
         try:
@@ -1495,8 +1488,7 @@ class LeftLine(AbstractLine):
         right_pos = pos + width
         tab_stop = self._next_tab_stop(left_pos, center_pos, right_pos)
         if tab_stop is None:  # no tab stop found
-            self.append(tab.to_space())  # replace tabulator by space
-            return self.append(cell)
+            return self._append_unlocked_tab(tab, cell)
         else:
             if tab_stop.kind == TabStopType.LEFT:
                 return self._append_left(cell, tab_stop.pos)
@@ -1504,6 +1496,19 @@ class LeftLine(AbstractLine):
                 return self._append_center(cell, tab_stop.pos)
             else:
                 return self._append_right(cell, tab_stop.pos)
+
+    def _append_unlocked_tab(self, tab, cell) -> AppendType:
+        pos0 = self._current_offset
+        space = tab.to_space()  # replace tabulator by space
+        pos1 = pos0 + space.total_width
+        width = cell.total_width
+        if pos1 + width <= self.line_width:
+            # The following cell is not locked and requires a space in front of it.
+            self._append_line_cell(space, pos0)
+            self._append_line_cell(cell, pos1)
+            self._current_offset = pos1 + width
+            return AppendType.SUCCESS
+        return AppendType.FAIL
 
     def _append_left(self, cell, pos) -> AppendType:
         width = cell.total_width

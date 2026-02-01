@@ -1,4 +1,4 @@
-#  Copyright (c) 2020-2023, Manfred Moitzi
+#  Copyright (c) 2020-2024, Manfred Moitzi
 #  License: MIT License
 """
 Implementation of the `__geo_interface__`: https://gist.github.com/sgillies/2217756
@@ -28,7 +28,13 @@ import numbers
 import copy
 import math
 import enum
-from ezdxf.math import Vec3, has_clockwise_orientation, Matrix44
+from ezdxf.math import (
+    Vec3,
+    has_clockwise_orientation,
+    Matrix44,
+    world_mercator_to_gps,
+    gps_to_world_mercator,
+)
 from ezdxf.path import make_path, from_hatch_boundary_path, make_polygon_structure
 from ezdxf.entities import DXFGraphic, LWPolyline, Point, Polyline, Line
 from ezdxf.entities.polygon import DXFPolygon
@@ -144,7 +150,7 @@ def dxf_entities(
             object with a :attr:`__geo__interface__` property
         polygon: see :class:`PolygonConversion`
         dxfattribs: dict with additional DXF attributes
-        post_process: post process function of type :class:`PostProcesFunc` that get the
+        post_process: post process function of type :class:`PostProcessFunc` that get the
             created DXF entity and the geo mapping as input, see reference implementation
             :func:`assign_layers`
 
@@ -663,13 +669,23 @@ def _rebuild(geo_mapping: GeoMapping, places: int = 6) -> GeoMapping:
 
     """
 
-    def pnt(v: Vec3) -> tuple[float, float]:
+    def vertex_2d(v: Vec3) -> tuple[float, float]:
         return round(v.x, places), round(v.y, places)
+
+    def vertex_3d(v: Vec3) -> tuple[float, float, float]:
+        return round(v.x, places), round(v.y, places), round(v.z, places)
+
+    def vertices(
+        coords: Sequence[Vec3],
+    ) -> list[tuple[float, float] | tuple[float, float, float]]:
+        if any(v.z for v in coords):
+            return [vertex_3d(v) for v in coords]
+        return [vertex_2d(v) for v in coords]
 
     def _polygon(exterior, holes):
         # For type "Polygon", the "coordinates" member MUST be an array of
         # linear ring coordinate arrays.
-        return [[pnt(v) for v in ring] for ring in [exterior] + holes]
+        return [vertices(ring) for ring in [exterior] + holes]
 
     geo_interface = dict(geo_mapping)
     type_ = geo_interface[TYPE]
@@ -681,14 +697,15 @@ def _rebuild(geo_mapping: GeoMapping, places: int = 6) -> GeoMapping:
         geo_interface[GEOMETRY] = _rebuild(geo_interface[GEOMETRY])
     elif type_ == POINT:
         v = geo_interface[COORDINATES]
-        geo_interface[COORDINATES] = pnt(v)
+        geo_interface[COORDINATES] = vertex_3d(v) if v.z else vertex_2d(v)
     elif type_ in (LINE_STRING, MULTI_POINT):
         coordinates = geo_interface[COORDINATES]
-        geo_interface[COORDINATES] = [pnt(v) for v in coordinates]
+        geo_interface[COORDINATES] = vertices(coordinates)
     elif type_ == MULTI_LINE_STRING:
         coordinates = []
         for line in geo_interface[COORDINATES]:
-            coordinates.append([pnt(v) for v in line])
+            coordinates.append(vertices(line))
+        geo_interface[COORDINATES] = coordinates
     elif type_ == POLYGON:
         geo_interface[COORDINATES] = _polygon(*geo_interface[COORDINATES])
     elif type_ == MULTI_POLYGON:
@@ -990,20 +1007,7 @@ def wgs84_4326_to_3395(location: Vec3) -> Vec3:
             value (East-West) in decimal degrees and the y-attribute
             represents the latitude value (North-South) in decimal degrees.
     """
-    # From: https://epsg.io/4326
-    # EPSG:4326 WGS84 - World Geodetic System 1984, used in GPS
-    # To: https://epsg.io/3395
-    # EPSG:3395 - World Mercator
-    # Source: https://gis.stackexchange.com/questions/259121/transformation-functions-for-epsg3395-projection-vs-epsg3857
-    longitude = math.radians(location.x)  # east
-    latitude = math.radians(location.y)  # north
-    a = WGS84_SEMI_MAJOR_AXIS
-    e = WGS84_ELLIPSOID_ECCENTRIC
-    e_sin_lat = math.sin(latitude) * e
-    c = math.pow((1.0 - e_sin_lat) / (1.0 + e_sin_lat), e / 2.0)  # 7-7 p.44
-    y = a * math.log(math.tan(CONST_PI_4 + latitude / 2.0) * c)  # 7-7 p.44
-    x = a * longitude
-    return Vec3(x, y)
+    return Vec3(gps_to_world_mercator(location.x, location.y))
 
 
 def wgs84_3395_to_4326(location: Vec3, tol: float = 1e-6) -> Vec3:
@@ -1017,30 +1021,7 @@ def wgs84_3395_to_4326(location: Vec3, tol: float = 1e-6) -> Vec3:
         tol: accuracy for latitude calculation
 
     """
-    # From: https://epsg.io/3395
-    # EPSG:3395 - World Mercator
-    # To: https://epsg.io/4326
-    # EPSG:4326 WGS84 - World Geodetic System 1984, used in GPS
-    # Source: Map Projections - A Working Manual
-    # https://pubs.usgs.gov/pp/1395/report.pdf
-    a = WGS84_SEMI_MAJOR_AXIS
-    e = WGS84_ELLIPSOID_ECCENTRIC
-    e2 = e / 2.0
-    pi2 = CONST_PI_2
-    x, y, _ = location
-    t = math.e ** (-y / a)  # 7-10 p.44
-    latitude_ = pi2 - 2.0 * math.atan(t)  # 7-11 p.45
-    while True:
-        e_sin_lat = math.sin(latitude_) * e
-        latitude = pi2 - 2.0 * math.atan(
-            t * ((1.0 - e_sin_lat) / (1.0 + e_sin_lat)) ** e2
-        )  # 7-9 p.44
-        if abs(latitude - latitude_) < tol:
-            break
-        latitude_ = latitude
-
-    longitude = x / a  # 7-12 p.45
-    return Vec3(math.degrees(longitude), math.degrees(latitude))
+    return Vec3(world_mercator_to_gps(location.x, location.y, tol))
 
 
 def dms2dd(d: float, m: float = 0, s: float = 0) -> float:

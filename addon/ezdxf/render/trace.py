@@ -14,12 +14,14 @@ from typing_extensions import TypeAlias
 from abc import abstractmethod
 from collections import namedtuple
 import math
+import numpy as np
+
+from ezdxf.lldxf.const import VTX_EXTRA_VERTEX_CREATED, VTX_SPLINE_FRAME_CONTROL_POINT
 from ezdxf.math import (
     Vec2,
     Vec3,
     UVec,
     BSpline,
-    linspace,
     ConstructionRay,
     OCS,
     ParallelRaysError,
@@ -29,20 +31,11 @@ from ezdxf.math import (
 
 if TYPE_CHECKING:
     from ezdxf.document import Drawing
-    from ezdxf.entities import (
-        DXFGraphic,
-        Solid,
-        Trace,
-        Face3d,
-        LWPolyline,
-        Polyline
-    )
+    from ezdxf.entities import DXFGraphic, Solid, Trace, Face3d, LWPolyline, Polyline
 
 __all__ = ["TraceBuilder", "LinearTrace", "CurvedTrace"]
 
-LinearStation = namedtuple(
-    "LinearStation", ("vertex", "start_width", "end_width")
-)
+LinearStation = namedtuple("LinearStation", ("vertex", "start_width", "end_width"))
 # start_width of the next (following) segment
 # end_width of the next (following) segment
 
@@ -165,14 +158,10 @@ class LinearTrace(AbstractTrace):
         point = Vec2(point)
         stations = self._stations
 
-        if bool(stations) and stations[-1].vertex.isclose(
-            point, abs_tol=self.abs_tol
-        ):
+        if bool(stations) and stations[-1].vertex.isclose(point, abs_tol=self.abs_tol):
             # replace last station
             stations.pop()
-        stations.append(
-            LinearStation(point, float(start_width), float(end_width))
-        )
+        stations.append(LinearStation(point, float(start_width), float(end_width)))
 
     def faces(self) -> Iterable[Face]:
         """Yields all faces as 4-tuples of :class:`~ezdxf.math.Vec2` objects.
@@ -210,7 +199,8 @@ class LinearTrace(AbstractTrace):
         ) -> Vec2:
             """Intersect two rays but take parallel rays into account."""
             # check for nearly parallel rays pi/100 ~1.8 degrees
-            if ray1.direction.angle_between(ray2.direction) < 0.031415:
+            angle = abs(ray1.direction.angle_between(ray2.direction))
+            if angle < 0.031415 or abs(math.pi - angle) < 0.031415:
                 return default
             try:
                 return ray1.intersect(ray2)
@@ -233,9 +223,7 @@ class LinearTrace(AbstractTrace):
             # Start- and end vertex are never to close together, close stations
             # will be merged in method LinearTrace.add_station().
             segments.append(
-                _normal_offset_points(
-                    start_vertex, end_vertex, start_width, end_width
-                )
+                _normal_offset_points(start_vertex, end_vertex, start_width, end_width)
             )
 
         # offset rays:
@@ -255,9 +243,7 @@ class LinearTrace(AbstractTrace):
                 if is_closed:
                     # Compute first two vertices as intersection of first and
                     # last segment
-                    last_offset_ray1, last_offset_ray2 = offset_rays(
-                        len(segments) - 1
-                    )
+                    last_offset_ray1, last_offset_ray2 = offset_rays(len(segments) - 1)
                     vtx0 = intersect(last_offset_ray1, offset_ray1, up1)
                     vtx1 = intersect(last_offset_ray2, offset_ray2, down1)
 
@@ -348,12 +334,12 @@ class CurvedTrace(AbstractTrace):
         """
         curve_trace = cls()
         count = segments + 1
-        t = linspace(0, spline.max_t, count)
-        for ((point, derivative), width) in zip(
-            spline.derivatives(t, n=1), linspace(start_width, end_width, count)
+        t = np.linspace(0, spline.max_t, count)
+        for (point, derivative), width in zip(
+            spline.derivatives(t, n=1), np.linspace(start_width, end_width, count)
         ):
             normal = Vec2(derivative).orthogonal(True)
-            curve_trace._append(Vec2(point), normal, width)
+            curve_trace._append(Vec2(point), normal, width)  # type: ignore
         return curve_trace
 
     @classmethod
@@ -386,9 +372,9 @@ class CurvedTrace(AbstractTrace):
         center = Vec2(arc.center)
         for point, width in zip(
             arc.vertices(arc.angles(count)),
-            linspace(start_width, end_width, count),
+            np.linspace(start_width, end_width, count),
         ):
-            curve_trace._append(point, point - center, width)
+            curve_trace._append(point, point - center, width)  # type: ignore
         return curve_trace
 
     def _append(self, point: Vec2, normal: Vec2, width: float) -> None:
@@ -423,6 +409,37 @@ class CurvedTrace(AbstractTrace):
             yield vtx0, vtx1, vtx2, vtx3
             vtx0 = vtx3
             vtx1 = vtx2
+
+
+def should_include_vertex_for_rendering(vertex_flags: int) -> bool:
+    """Determine if a vertex should be included in rendering based on its flags.
+
+    According to the DXF specification:
+    - Flag 0: Straight-segment vertex (include)
+    - Flag 1: Extra curve-fit vertex (exclude - auto-generated)
+    - Flag 2: Curve-fit tangent vertex (include - carries tangent info)
+    - Flag 8: Spline-vertex (fit-point) for 2D spline (include)
+    - Flag 16: Spline-frame control point (exclude - internal calculation only)
+
+    Args:
+        vertex_flags: The vertex flags value (group code 70)
+
+    Returns:
+        True if the vertex should be included in rendering, False otherwise
+    """
+    # Exclude extra vertices created by curve-fitting (flag 1)
+    if vertex_flags & VTX_EXTRA_VERTEX_CREATED:
+        return False
+
+    # Exclude spline frame control points (flag 16)
+    if vertex_flags & VTX_SPLINE_FRAME_CONTROL_POINT:
+        return False
+
+    # Include all other vertex types:
+    # - Flag 0: Regular straight-segment vertices
+    # - Flag 2: Curve-fit tangent vertices (carry tangent direction)
+    # - Flag 8: Spline fit-points
+    return True
 
 
 class TraceBuilder(Sequence):
@@ -463,9 +480,7 @@ class TraceBuilder(Sequence):
         in :ref:`WCS`.
         """
         for face in self.faces():
-            yield tuple(
-                ocs.points_to_wcs(Vec3(v.x, v.y, elevation) for v in face)
-            )
+            yield tuple(ocs.points_to_wcs(Vec3(v.x, v.y, elevation) for v in face))
 
     def polygons(self) -> Iterable[Polygon]:
         """Yields for each sub-trace a single polygon as sequence of
@@ -474,17 +489,13 @@ class TraceBuilder(Sequence):
         for trace in self._traces:
             yield trace.polygon()
 
-    def polygons_wcs(
-        self, ocs: OCS, elevation: float
-    ) -> Iterable[Sequence[Vec3]]:
+    def polygons_wcs(self, ocs: OCS, elevation: float) -> Iterable[Sequence[Vec3]]:
         """Yields for each sub-trace a single polygon as sequence of
         :class:`~ezdxf.math.Vec3` objects in :ref:`WCS`.
         """
         for trace in self._traces:
             yield tuple(
-                ocs.points_to_wcs(
-                    Vec3(v.x, v.y, elevation) for v in trace.polygon()
-                )
+                ocs.points_to_wcs(Vec3(v.x, v.y, elevation) for v in trace.polygon())
             )
 
     def virtual_entities(
@@ -516,18 +527,14 @@ class TraceBuilder(Sequence):
         traces = self._traces
         if len(traces) < 2:
             return
-        if isinstance(traces[0], LinearTrace) and isinstance(
-            traces[-1], LinearTrace
-        ):
+        if isinstance(traces[0], LinearTrace) and isinstance(traces[-1], LinearTrace):
             first = cast(LinearTrace, traces.pop(0))
             last = cast(LinearTrace, traces[-1])
             for point, start_width, end_width in first:
                 last.add_station(point, start_width, end_width)
 
     @classmethod
-    def from_polyline(
-        cls, polyline: DXFGraphic, segments: int = 64
-    ) -> TraceBuilder:
+    def from_polyline(cls, polyline: DXFGraphic, segments: int = 64) -> TraceBuilder:
         """
         Create a complete trace from a LWPOLYLINE or a 2D POLYLINE entity, the
         trace consist of multiple sub-traces if :term:`bulge` values are
@@ -562,8 +569,14 @@ class TraceBuilder(Sequence):
             closed = polyline.is_closed
             default_start_width = polyline.dxf.default_start_width
             default_end_width = polyline.dxf.default_end_width
+
+            filtered_vertices = [
+                vertex for vertex in polyline.vertices
+                if should_include_vertex_for_rendering(vertex.dxf.get("flags", 0))
+            ]
+
             points = []
-            for vertex in polyline.vertices:
+            for vertex in filtered_vertices:
                 location = Vec2(vertex.dxf.location)
                 if vertex.dxf.hasattr("start_width"):
                     start_width = vertex.dxf.start_width
@@ -583,14 +596,14 @@ class TraceBuilder(Sequence):
             points.append(points[0])
 
         trace = cls()
-        store_bulge = None
-        store_start_width = None
-        store_end_width = None
-        store_point = None
+        store_bulge = 0.0
+        store_start_width = 0.0
+        store_end_width = 0.0
+        store_point: UVec | None = None
 
         linear_trace = LinearTrace()
         for point, start_width, end_width, bulge in points:
-            if store_bulge:
+            if store_bulge != 0.0:
                 center, start_angle, end_angle, radius = bulge_to_arc(
                     store_point, point, store_bulge
                 )
@@ -609,9 +622,9 @@ class TraceBuilder(Sequence):
                         ew = store_end_width
                         sw = store_start_width
                     trace.append(CurvedTrace.from_arc(arc, sw, ew, segments))
-                store_bulge = None
+                store_bulge = 0.0
 
-            if bulge != 0:  # arc from prev_point to point
+            if bulge != 0.0:  # arc from prev_point to point
                 if linear_trace.is_started:
                     linear_trace.add_station(point, start_width, end_width)
                     trace.append(linear_trace)
