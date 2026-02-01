@@ -311,23 +311,26 @@ class SewageNetworkFields:
         """Get common field name patterns for auto-mapping suggestions."""
         return {
             # Pipe fields - including QEsg patterns as suggestions (not requirements)
-            "pipe_id": ["ID_TRM_(N)"],
-            "upstream_node": ["p1_id", "PVM", "node_upstream"],
-            "downstream_node": ["p2_id", "PVJ", "node_downstream"],
+            "pipe_id": ["ID_TRM_(N)", "pipe_id", "trecho_id"],
+            "upstream_node": ["node_up_id", "PVM", "node_upstream", "nos_montante"],
+            "downstream_node": ["node_down_id", "PVJ", "node_downstream", "nos_jusante"],
             "length": ["L", "length", "comprimento", "len", "distance", "extensao", "dist", "comp"],
             "diameter": ["DN", "diameter", "diam", "dn", "size", "diametro", "bitola", "calibre"],
-            "upstream_invert": ["p1_h", "CF_nodo_p1"],
-            "downstream_invert": ["p2_h", "CF_nodo_p2"],
-            "upstream_ground": ["p1_elev", "CTM", "CT_(N)_p2"],
-            "downstream_ground": ["p2_elev", "CTJ", "CT_(N)_p1"],
-            "slope": ["S"],
-            "material": ["Mat_col"],
+            
+            # Fields that come from node assignment
+            "upstream_invert_elev": ["node_up_invert_elev", "CF_nodo_p1", "cf_montante", "invert_up"],
+            "downstream_invert_elev": ["node_down_invert_elev", "CF_nodo_p2", "cf_jusante", "invert_down"],
+            "upstream_ground_elev": ["node_up_ground_elev", "CT_(N)_p1", "ct_montante", "ground_up"],
+            "downstream_ground_elev": ["node_down_ground_elev", "CT_(N)_p2", "ct_jusante", "ground_down"],
+            
+            "slope": ["S", "slope", "declividade", "inclinacao"],
+            "material": ["Mat_col", "material", "mat"],
             "notes": [],
             
             # Junction fields
-            "node_id": ["Id_NODO_(n"],
-            "ground_elevation": ["CT_(N)", "elev_ground"],
-            "invert_elevation": ["CF_nodo", "elev_invert", "cota_inv"],
+            "node_id": ["Id_NODO_(n", "node_id", "id_no", "pv_id"],
+            "ground_elevation": ["CT_(N)", "elev_ground", "cota_terreno", "ct"],
+            "invert_elevation": ["CF_nodo", "elev_invert", "cota_inv", "cf"],
             "depth": ["h_nodo_tp", "depth", "profundidade", "altura", "height", "cover"],
         }
     
