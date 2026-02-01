@@ -64,24 +64,8 @@ class SewageNetworkFields:
                 is_required=True,
                 validation_rules={"min_value": 50.0, "max_value": 3000.0}
             ),
-            RequiredField(
-                name="upstream_invert",
-                display_name=tr("Upstream Invert"),
-                field_type=FieldType.DOUBLE,
-                description=tr("Upstream invert elevation in meters"),
-                default_value=0.0,
-                is_required=True,
-                validation_rules={"min_value": -100.0, "max_value": 5000.0}
-            ),
-            RequiredField(
-                name="downstream_invert",
-                display_name=tr("Downstream Invert"),
-                field_type=FieldType.DOUBLE,
-                description=tr("Downstream invert elevation in meters"),
-                default_value=0.0,
-                is_required=True,
-                validation_rules={"min_value": -100.0, "max_value": 5000.0}
-            ),
+            # Note: upstream_invert_elev and downstream_invert_elev moved to optional
+            # They come from the nodes layer, not directly from pipes
         ]
     
     @classmethod
@@ -89,19 +73,37 @@ class SewageNetworkFields:
         """Get localized optional fields for pipe segments."""
         return [
             RequiredField(
-                name="upstream_ground",
-                display_name=tr("Upstream Ground"),
+                name="upstream_invert_elev",
+                display_name=tr("Upstream Invert Elevation"),
                 field_type=FieldType.DOUBLE,
-                description=tr("Upstream ground surface elevation in meters"),
+                description=tr("Upstream invert elevation (cota de fundo) in meters - from nodes layer"),
                 default_value=0.0,
                 is_required=False,
                 validation_rules={"min_value": -100.0, "max_value": 5000.0}
             ),
             RequiredField(
-                name="downstream_ground",
-                display_name=tr("Downstream Ground"),
+                name="downstream_invert_elev",
+                display_name=tr("Downstream Invert Elevation"),
                 field_type=FieldType.DOUBLE,
-                description=tr("Downstream ground surface elevation in meters"),
+                description=tr("Downstream invert elevation (cota de fundo) in meters - from nodes layer"),
+                default_value=0.0,
+                is_required=False,
+                validation_rules={"min_value": -100.0, "max_value": 5000.0}
+            ),
+            RequiredField(
+                name="upstream_ground_elev",
+                display_name=tr("Upstream Ground Elevation"),
+                field_type=FieldType.DOUBLE,
+                description=tr("Upstream ground surface elevation in meters - from nodes layer"),
+                default_value=0.0,
+                is_required=False,
+                validation_rules={"min_value": -100.0, "max_value": 5000.0}
+            ),
+            RequiredField(
+                name="downstream_ground_elev",
+                display_name=tr("Downstream Ground Elevation"),
+                field_type=FieldType.DOUBLE,
+                description=tr("Downstream ground surface elevation in meters - from nodes layer"),
                 default_value=0.0,
                 is_required=False,
                 validation_rules={"min_value": -100.0, "max_value": 5000.0}
@@ -148,39 +150,31 @@ class SewageNetworkFields:
                 is_required=True,
                 validation_rules={"max_length": 50}
             ),
+            RequiredField(
+                name="ground_elevation",
+                display_name=tr("Ground Elevation (CT)"),
+                field_type=FieldType.DOUBLE,
+                description=tr("Ground surface elevation at junction in meters (Cota do Terreno)"),
+                default_value=0.0,
+                is_required=True,
+                validation_rules={"min_value": -100.0, "max_value": 5000.0}
+            ),
+            RequiredField(
+                name="invert_elevation",
+                display_name=tr("Invert Elevation (CF)"),
+                field_type=FieldType.DOUBLE,
+                description=tr("Junction invert elevation in meters (Cota de Fundo)"),
+                default_value=0.0,
+                is_required=True,
+                validation_rules={"min_value": -100.0, "max_value": 5000.0}
+            ),
         ]
     
     @classmethod
     def get_junctions_optional_fields(cls) -> List[RequiredField]:
         """Get localized optional fields for junctions/manholes."""
         return [
-            RequiredField(
-                name="ground_elevation",
-                display_name=tr("Ground Elevation"),
-                field_type=FieldType.DOUBLE,
-                description=tr("Ground surface elevation at junction in meters"),
-                default_value=0.0,
-                is_required=False,
-                validation_rules={"min_value": -100.0, "max_value": 5000.0}
-            ),
-            RequiredField(
-                name="invert_elevation",
-                display_name=tr("Invert Elevation"),
-                field_type=FieldType.DOUBLE,
-                description=tr("Junction invert elevation in meters"),
-                default_value=0.0,
-                is_required=False,
-                validation_rules={"min_value": -100.0, "max_value": 5000.0}
-            ),
-            RequiredField(
-                name="depth",
-                display_name=tr("Depth"),
-                field_type=FieldType.DOUBLE,
-                description=tr("Junction depth in meters"),
-                default_value=0.0,
-                is_required=False,
-                validation_rules={"min_value": 0.0, "max_value": 50.0}
-            ),
+            # Note: depth is now calculated automatically from ground_elevation - invert_elevation
             RequiredField(
                 name="notes",
                 display_name=tr("Notes"),
@@ -311,24 +305,24 @@ class SewageNetworkFields:
         """Get common field name patterns for auto-mapping suggestions."""
         return {
             # Pipe fields - including QEsg patterns as suggestions (not requirements)
-            "pipe_id": ["ID_TRM_(N)"],
-            "upstream_node": ["PVM", "node_upstream"],
-            "downstream_node": ["PVJ", "node_downstream"],
+            "pipe_id": ["ID_TRM_(N)", "pipe_id", "trecho_id"],
+            "upstream_node": ["node_up_id", "p1_id", "PVM", "node_upstream", "nos_montante"],
+            "downstream_node": ["node_down_id", "p2_id", "PVJ", "node_downstream", "nos_jusante"],
             "length": ["L", "length", "comprimento", "len", "distance", "extensao", "dist", "comp"],
             "diameter": ["DN", "diameter", "diam", "dn", "size", "diametro", "bitola", "calibre"],
-            "upstream_invert": ["CF_nodo_p1"],
-            "downstream_invert": ["CF_nodo_p2"],
-            "upstream_ground": ["CTM", "CT_(N)_p2"],
-            "downstream_ground": ["CTJ", "CT_(N)_p1"],
-            "slope": ["S"],
-            "material": ["Mat_col"],
+            # New naming: node_up_* and node_down_* for fields from nodes layer
+            "upstream_invert_elev": ["node_up_invert_elev", "CF_nodo_p1", "cf_montante", "invert_up"],
+            "downstream_invert_elev": ["node_down_invert_elev", "CF_nodo_p2", "cf_jusante", "invert_down"],
+            "upstream_ground_elev": ["node_up_ground_elev", "CT_(N)_p1", "ct_montante", "ground_up"],
+            "downstream_ground_elev": ["node_down_ground_elev", "CT_(N)_p2", "ct_jusante", "ground_down"],
+            "slope": ["S", "slope", "declividade", "inclinacao"],
+            "material": ["Mat_col", "material", "mat"],
             "notes": [],
             
             # Junction fields
-            "node_id": ["Id_NODO_(n"],
-            "ground_elevation": ["CT_(N)", "elev_ground"],
-            "invert_elevation": ["CF_nodo", "elev_invert", "cota_inv"],
-            "depth": ["h_nodo_tp", "depth", "profundidade", "altura", "height", "cover"],
+            "node_id": ["Id_NODO_(n", "node_id", "id_no", "pv_id", "manhole_id"],
+            "ground_elevation": ["CT_(N)", "elev_ground", "cota_terreno", "ct", "ground_elev"],
+            "invert_elevation": ["CF_nodo", "elev_invert", "cota_fundo", "cf", "invert_elev"],
         }
     
     @classmethod
