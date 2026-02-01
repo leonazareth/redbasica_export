@@ -135,6 +135,32 @@ class SewageNetworkFields:
                 is_required=False,
                 validation_rules={"max_length": 255}
             ),
+            RequiredField(
+                name="downstream_depth",
+                display_name=tr("Collector Depth"),
+                field_type=FieldType.DOUBLE,
+                description=tr("Depth of the collector pipe at the downstream node (h_col_p2)"),
+                default_value=None,
+                is_required=False
+            ),
+            RequiredField(
+                name="drop_type",
+                display_name=tr("Drop Type"),
+                field_type=FieldType.STRING,
+                description=tr("Drop type: 'D' (Degrau) or 'TC' (Tubo de Queda)"),
+                default_value="",
+                is_required=False,
+                validation_rules={"max_length": 10}
+            ),
+            RequiredField(
+                name="drop_height",
+                display_name=tr("Drop Height"),
+                field_type=FieldType.DOUBLE,
+                description=tr("Height of the drop or drop pipe"),
+                default_value=0.0,
+                is_required=False,
+                validation_rules={"min_value": 0.0, "max_value": 100.0}
+            ),
         ]
     
     @classmethod
@@ -305,11 +331,14 @@ class SewageNetworkFields:
         """Get common field name patterns for auto-mapping suggestions."""
         return {
             # Pipe fields - including QEsg patterns as suggestions (not requirements)
-            "pipe_id": ["ID_TRM_(N)", "pipe_id", "trecho_id"],
+            "pipe_id": ["ID_TRM_(N)", "pipe_id", "trecho_id", "Rede"],
             "upstream_node": ["node_up_id", "PVM", "node_upstream", "nos_montante"],
             "downstream_node": ["node_down_id", "PVJ", "node_downstream", "nos_jusante"],
             "length": ["L", "length", "comprimento", "len", "distance", "extensao", "dist", "comp"],
             "diameter": ["DN", "diameter", "diam", "dn", "size", "diametro", "bitola", "calibre"],
+            
+            # Additional optional fields
+            "downstream_depth": ["h_col_p2", "prof_montante_p2", "h_chegada"],
             
             # Fields that come from node assignment
             "upstream_invert_elev": ["node_up_invert_elev", "CF_nodo_p1", "cf_montante", "invert_up"],
@@ -317,7 +346,11 @@ class SewageNetworkFields:
             "upstream_ground_elev": ["node_up_ground_elev", "CT_(N)_p1", "ct_montante", "ground_up"],
             "downstream_ground_elev": ["node_down_ground_elev", "CT_(N)_p2", "ct_jusante", "ground_down"],
             
-            "slope": ["S", "slope", "declividade", "inclinacao"],
+            # Drop / Drop Pipe fields
+            "drop_type": ["Caida_p2", "tipo_queda", "degrau", "drop_type"],
+            "drop_height": ["Caida_p2_h", "altura_queda", "degrau_h", "drop_height"],
+            
+            "slope": ["S", "slope", "declividade", "inclinacao", "Declivity"],
             "material": ["Mat_col", "material", "mat"],
             "notes": [],
             

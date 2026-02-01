@@ -83,13 +83,6 @@ class AttributeMapper:
                 print(f"DEBUG: field_mappings after adding {required_field}: {mapping.field_mappings}")
                 print(f"DEBUG: field_mappings type: {type(mapping.field_mappings)}")
         
-        # Set default values for unmapped required fields
-        for field_name in required_fields:
-            if field_name not in mapping.field_mappings:
-                field_def = SewageNetworkFields.get_field_by_name(field_name)
-                if field_def and field_def.default_value is not None:
-                    mapping.default_values[field_name] = field_def.default_value
-        
         # Validate the mapping
         mapping = self._validate_mapping(mapping, layer)
         

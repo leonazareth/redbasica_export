@@ -33,9 +33,6 @@ from qgis.core import Qgis, QgsMessageLog, QgsApplication
 # Initialize Qt resources from file resources.py
 from .resources import *
 
-# Import the code for the DockWidget
-from .redbasica_export_dockwidget import RedBasicaExportDockWidget
-
 # Import core modules
 from .core.layer_manager import LayerManager
 from .core.template_manager import TemplateManager
@@ -74,7 +71,6 @@ class RedBasicaExport:
 
         # Plugin state
         self.pluginIsActive = False
-        self.dockwidget = None
         
         # Core components
         self.layer_manager = None
@@ -199,17 +195,11 @@ class RedBasicaExport:
         
         self.add_action(
             icon,
-            text=tr('Flexible Sewerage DXF Export'),
-            callback=self.run,
+            text=tr('RedBasica Export Helper'),
+            callback=self.show_export_dialog,
             parent=self.iface.mainWindow())
         
-        # Add action for main export dialog
-        self.add_action(
-            icon_path,
-            text=tr('Export Sewerage Network to DXF...'),
-            callback=self.show_export_dialog,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=False)
+        # (Secondary action removed as it is now redundant)
 
     #--------------------------------------------------------------------------
     
@@ -321,27 +311,22 @@ class RedBasicaExport:
             # Convert dict back to ExportConfiguration
             config = self.configuration._dict_to_export_config(config_dict)
             
-            # Show progress dialog
-            progress = QProgressDialog(
+            # Show start message
+            self.iface.messageBar().pushMessage(
+                "RedBasica Export",
                 "Exporting sewerage network to DXF...",
-                "Cancel", 0, 100, self.iface.mainWindow()
+                level=Qgis.Info,
+                duration=3
             )
-            progress.setWindowModality(Qt.WindowModal)
-            progress.show()
-            
-            # Update progress
-            progress.setValue(10)
             QgsApplication.processEvents()
             
             # Perform export
             success, message, stats = self.dxf_exporter.export_with_error_handling(config)
             
-            progress.close()
-            
             if success:
                 self._show_success_message(
                     "Export Complete",
-                    f"Sewerage network exported successfully to:\n{config.output_path}\n\n{message}"
+                    f"Sewerage network exported successfully to:\n{config.output_path}"
                 )
             else:
                 self._show_error_message(
@@ -362,31 +347,12 @@ class RedBasicaExport:
         self.iface.messageBar().pushMessage(
             title, message, level=Qgis.Critical, duration=10
         )
-        QMessageBox.critical(self.iface.mainWindow(), title, message)
     
     def _show_success_message(self, title, message):
         """Show success message to user."""
         self.iface.messageBar().pushMessage(
             title, message, level=Qgis.Success, duration=5
         )
-        QMessageBox.information(self.iface.mainWindow(), title, message)
-
-    def onClosePlugin(self):
-        """Cleanup necessary items here when plugin dockwidget is closed"""
-
-        #print "** CLOSING RedBasicaExport"
-
-        # disconnects
-        self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
-
-        # remove this statement if dockwidget is to remain
-        # for reuse if plugin is reopened
-        # Commented next statement since it causes QGIS crashe
-        # when closing the docked window:
-        # self.dockwidget = None
-
-        self.pluginIsActive = False
-
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -409,52 +375,3 @@ class RedBasicaExport:
         self.template_manager = None
         self.dxf_exporter = None
         self.configuration = None
-
-    #--------------------------------------------------------------------------
-
-    def run(self):
-        """Run method that loads and starts the plugin"""
-
-        if not self.pluginIsActive:
-            self.pluginIsActive = True
-
-            try:
-                # Check dependencies first
-                if not self.dependencies_ok:
-                    self._show_error_message(
-                        "Dependencies Missing",
-                        "Required libraries are not available. Please reinstall the plugin."
-                    )
-                    return
-                
-                # Initialize components if needed
-                if not self.layer_manager:
-                    self._initialize_components()
-
-                # dockwidget may not exist if:
-                #    first run of plugin
-                #    removed on close (see self.onClosePlugin method)
-                if self.dockwidget == None:
-                    # Create the dockwidget (after translation) and keep reference
-                    self.dockwidget = RedBasicaExportDockWidget(
-                        layer_manager=self.layer_manager,
-                        template_manager=self.template_manager,
-                        dxf_exporter=self.dxf_exporter
-                    )
-
-                # connect to provide cleanup on closing of dockwidget
-                self.dockwidget.closingPlugin.connect(self.onClosePlugin)
-
-                # show the dockwidget
-                # TODO: fix to allow choice of dock location
-                self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
-                self.dockwidget.show()
-                
-            except Exception as e:
-                error_msg = f"Failed to start plugin: {e}"
-                QgsMessageLog.logMessage(error_msg, "RedBasica Export", Qgis.Critical)
-                self._show_error_message(
-                    "Plugin Startup Error",
-                    f"Failed to start RedBasica Export plugin:\n{error_msg}"
-                )
-                self.pluginIsActive = False

@@ -152,8 +152,8 @@ class ExportMode(Enum):
 
 class LabelStyle(Enum):
     """Enumeration of pipe label styles."""
-    COMPACT = "Compact (2 lines)"
-    STACKED = "Stacked (4 lines)"
+    COMPACT = "2 lines"
+    STACKED = "4 lines"
 
 
 @dataclass
@@ -162,17 +162,18 @@ class ExportConfiguration:
     pipes_mapping: Optional[LayerMapping] = None
     junctions_mapping: Optional[LayerMapping] = None
     output_path: str = ""
-    scale_factor: int = 2000
+    scale_factor: int = 1000
     layer_prefix: str = "RB_"
     template_path: Optional[str] = None
     include_arrows: bool = True
     include_labels: bool = True
     include_elevations: bool = True
+    include_collector_depth: bool = True  # Whether to include collector depth label near downstream node
     export_node_id: bool = False  # Whether to include node ID in MULTILEADER labels
     include_slope_unit: bool = False  # Whether to append 'm/m' after slope value
     label_format: str = "{length:.0f}-{diameter:.0f}-{slope:.5f}"
     export_mode: ExportMode = ExportMode.STANDARD
-    label_style: LabelStyle = LabelStyle.COMPACT
+    label_style: LabelStyle = LabelStyle.STACKED
     
     def __post_init__(self):
         """Debug ExportConfiguration creation."""

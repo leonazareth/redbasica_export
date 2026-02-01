@@ -33,7 +33,7 @@ class TemplateManager:
     manhole data blocks.
     """
     
-    # Standard QEsg-compatible layer definitions
+    # Standard layer definitions
     LAYER_DEFINITIONS = [
         ('REDE', 5, 'Sewage pipes/network'),             # Main pipe network - BLUE
         ('NUMERO', 7, 'Pipe ID labels'),                 # Pipe identification numbers - WHITE
@@ -75,7 +75,7 @@ class TemplateManager:
         """
         # Get plugin directory
         plugin_dir = os.path.dirname(os.path.dirname(__file__))
-        template_path = os.path.join(plugin_dir, 'resources', 'templates', 'QEsg_template.dxf')
+        template_path = os.path.join(plugin_dir, 'resources', 'templates', 'RB_template.dxf')
         
         if os.path.exists(template_path):
             return template_path

@@ -14,6 +14,7 @@ from qgis.PyQt.QtWidgets import (
     QDialog, QFileDialog, QMessageBox, QPushButton, 
     QLineEdit, QSpinBox, QCheckBox, QTextEdit, QLabel
 )
+from qgis.PyQt import QtWidgets
 from qgis.core import (
     QgsProject, QgsVectorLayer, QgsWkbTypes, QgsMapLayerProxyModel
 )
@@ -28,6 +29,8 @@ from ..core.exceptions import ValidationError, ExportError
 from ..core.error_messages import create_error_formatter
 from ..core.dxf_exporter import DXFExporter
 from ..core.i18n_manager import tr
+from ..core.i18n_manager import tr
+from ..core.attribute_mapper import AttributeMapper
 from .attribute_mapper_dialog import AttributeMapperDialog
 from .collapsible_group_box import CollapsibleGroupBox
 
@@ -59,10 +62,13 @@ class MainExportDialog(QDialog, FORM_CLASS):
             parent: Parent widget
         """
         super(MainExportDialog, self).__init__(parent)
+        super(MainExportDialog, self).__init__(parent)
         self.setupUi(self)
+        self.setWindowTitle("RedBasica Export Helper")
         
         self.layer_manager = layer_manager
         self.configuration = Configuration()
+        self.attribute_mapper = AttributeMapper()
         self.error_formatter = create_error_formatter()
         
         # Attribute mapping dialogs
@@ -109,6 +115,17 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.junctionsLayerCombo.setFilters(QgsMapLayerProxyModel.PointLayer)
         self.junctionsLayerCombo.setAllowEmptyLayer(True)
         self.junctionsLayerCombo.setShowCrs(True)
+
+        # Add Auto-Map Button Programmatically
+        from qgis.PyQt.QtWidgets import QPushButton, QFormLayout
+        self.autoMapButton = QPushButton("Auto-Map Fields")
+        self.autoMapButton.setToolTip("Attempt to automatically map fields for selected layers")
+        
+        # Find the layer layout
+        layer_group = self.findChild(QtWidgets.QGroupBox, "layerSelectionGroup")
+        if layer_group and layer_group.layout():
+             # Add to row 2
+             layer_group.layout().setWidget(2, QFormLayout.SpanningRole, self.autoMapButton)
     
     def _setup_collapsible_advanced_options(self):
         """Replace the static Advanced Options group with a collapsible one."""
@@ -142,7 +159,9 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.exportModeLabel = QLabel("Export Mode:")
         self.exportModeCombo = QComboBox()
         for mode in ExportMode:
-            self.exportModeCombo.addItem(mode.value, mode)
+            # Skip ENHANCED mode for now
+            if mode.name != "ENHANCED":
+                self.exportModeCombo.addItem(mode.value, mode)
             
         mode_layout.addWidget(self.exportModeLabel)
         mode_layout.addWidget(self.exportModeCombo)
@@ -194,6 +213,12 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.includeSlopeUnitCheckBox.setToolTip("When checked, appends 'm/m' after slope values")
         self.collapsible_advanced.addWidget(self.includeSlopeUnitCheckBox)
         
+        # 6. Include Collector Depth (checked by default)
+        self.includeCollectorDepthCheckBox = QCheckBox("Include Collector Depth")
+        self.includeCollectorDepthCheckBox.setChecked(True)
+        self.includeCollectorDepthCheckBox.setToolTip("Show collector depth (h_col_p2) 5m from downstream node")
+        self.collapsible_advanced.addWidget(self.includeCollectorDepthCheckBox)
+        
         # Create a container for the label format row
         label_format_container = QWidget()
         label_format_layout = QHBoxLayout(label_format_container)
@@ -232,7 +257,43 @@ class MainExportDialog(QDialog, FORM_CLASS):
         self.includeArrowsCheckBox.toggled.connect(self._update_validation)
         self.includeLabelsCheckBox.toggled.connect(self._update_validation)
         self.includeElevationsCheckBox.toggled.connect(self._update_validation)
+        self.includeElevationsCheckBox.toggled.connect(self._update_validation)
         self.labelFormatEdit.textChanged.connect(self._update_validation)
+        
+        # Connect new Auto-Map button if created
+        if hasattr(self, 'autoMapButton'):
+            self.autoMapButton.clicked.connect(self._manual_auto_map_all)
+
+    def _manual_auto_map_all(self):
+        """Manually trigger auto-mapping for all layers."""
+        pipes_layer = self.pipesLayerCombo.currentLayer()
+        if pipes_layer:
+            self._try_auto_configure_pipes(pipes_layer)
+            
+        junctions_layer = self.junctionsLayerCombo.currentLayer()
+        if junctions_layer:
+            self._try_auto_configure_junctions(junctions_layer)
+            
+        # Show feedback using Message Bar
+        
+        # Update validation status visually
+        self._update_validation()
+
+        # Validation checks logic
+        pipes_mapped = self.pipes_mapping and self.pipes_mapping.is_valid
+        junctions_mapped = self.junctions_mapping and self.junctions_mapping.is_valid
+        
+        from qgis.utils import iface
+        from qgis.core import Qgis
+        
+        if pipes_mapped and junctions_mapped:
+            iface.messageBar().pushMessage("RedBasica", "All fields auto-mapped successfully!", Qgis.Success)
+        elif pipes_mapped:
+            iface.messageBar().pushMessage("RedBasica", "Pipes auto-mapped. Junctions missing required mappings.", Qgis.Warning)
+        elif junctions_mapped:
+            iface.messageBar().pushMessage("RedBasica", "Junctions auto-mapped. Pipes missing required mappings.", Qgis.Warning)
+        else:
+             iface.messageBar().pushMessage("RedBasica", "Auto-mapping failed. Check field names.", Qgis.Warning)
     
     def _on_pipes_layer_changed(self, layer: QgsVectorLayer):
         """Handle pipes layer selection change."""
@@ -248,8 +309,20 @@ class MainExportDialog(QDialog, FORM_CLASS):
                 return
             
             self.configurePipesButton.setEnabled(True)
-            # Reset mapping when layer changes
+            
+            # Reset mapping initially
             self.pipes_mapping = None
+            
+            # Check for saved configuration FIRST
+            saved_config = self.configuration.load_export_configuration()
+            if saved_config and saved_config.pipes_mapping and saved_config.pipes_mapping.layer_id == layer.id():
+                self.pipes_mapping = saved_config.pipes_mapping
+                print(f"DEBUG: Loaded saved pipes mapping for {layer.name()}")
+            else:
+                # AUTO-MAP: Only try if no saved config exists
+                self._try_auto_configure_pipes(layer)
+            
+            self._update_validation()
         else:
             self.configurePipesButton.setEnabled(False)
             self.pipes_mapping = None
@@ -270,8 +343,20 @@ class MainExportDialog(QDialog, FORM_CLASS):
                 return
             
             self.configureJunctionsButton.setEnabled(True)
-            # Reset mapping when layer changes
+             
+            # Reset mapping initially
             self.junctions_mapping = None
+            
+            # Check for saved configuration FIRST
+            saved_config = self.configuration.load_export_configuration()
+            if saved_config and saved_config.junctions_mapping and saved_config.junctions_mapping.layer_id == layer.id():
+                self.junctions_mapping = saved_config.junctions_mapping
+                print(f"DEBUG: Loaded saved junctions mapping for {layer.name()}")
+            else:
+                # AUTO-MAP: Only try if no saved config exists
+                self._try_auto_configure_junctions(layer)
+            
+            self._update_validation()
         else:
             self.configureJunctionsButton.setEnabled(False)
             self.junctions_mapping = None
@@ -471,6 +556,7 @@ class MainExportDialog(QDialog, FORM_CLASS):
             include_elevations=self.includeElevationsCheckBox.isChecked(),
             export_node_id=self.exportNodeIdCheckBox.isChecked(),
             include_slope_unit=self.includeSlopeUnitCheckBox.isChecked(),
+            include_collector_depth=self.includeCollectorDepthCheckBox.isChecked(),
             label_format=self.labelFormatEdit.text().strip(),
             export_mode=self.exportModeCombo.currentData(),
             label_style=self.labelStyleCombo.currentData()
@@ -483,7 +569,7 @@ class MainExportDialog(QDialog, FORM_CLASS):
 
             # Load basic settings
             self.scaleFactorSpinBox.setValue(
-                self.configuration.get_setting('scale_factor', 2000)
+                self.configuration.get_setting('scale_factor', 1000)
             )
             self.layerPrefixEdit.setText(
                 self.configuration.get_setting('layer_prefix', 'RB_')
@@ -491,8 +577,29 @@ class MainExportDialog(QDialog, FORM_CLASS):
             
             # Load advanced options
             
-            # Export Mode
-            saved_mode_name = self.configuration.get_setting('export_mode', ExportMode.STANDARD.name)
+            # Label Style
+            # Label Style - force default to STACKED if not set or invalid
+            # Also handle migration from "COMPACT" if it was saved previously
+            saved_style_name = self.configuration.get_setting('label_style', LabelStyle.STACKED.name)
+            
+            if saved_style_name in ["COMPACT", "2 lines"]: # Force migration to STACKED
+                 saved_style_name = LabelStyle.STACKED.name
+            
+            # Find index
+            style_idx = -1
+            try:
+                target_data = LabelStyle[saved_style_name]
+                style_idx = self.labelStyleCombo.findData(target_data)
+            except KeyError:
+                pass
+            
+            if style_idx >= 0:
+                self.labelStyleCombo.setCurrentIndex(style_idx)
+            else:
+                # Absolute fallback
+                fallback_idx = self.labelStyleCombo.findData(LabelStyle.STACKED)
+                if fallback_idx >= 0:
+                    self.labelStyleCombo.setCurrentIndex(fallback_idx)
             
             # Find and set the mode in combobox
             mode_index = self.exportModeCombo.findData(ExportMode[saved_mode_name])
@@ -510,10 +617,29 @@ class MainExportDialog(QDialog, FORM_CLASS):
             )
             
             # Label Style
-            saved_style_name = self.configuration.get_setting('label_style', LabelStyle.COMPACT.name)
-            style_index = self.labelStyleCombo.findData(LabelStyle[saved_style_name])
-            if style_index >= 0:
-                self.labelStyleCombo.setCurrentIndex(style_index)
+            # Label Style - force default to STACKED if not set or invalid
+            # Also handle migration from "COMPACT" if it was saved previously
+            saved_style_name = self.configuration.get_setting('label_style', LabelStyle.STACKED.name)
+            
+            if saved_style_name == "COMPACT": # Force migration to STACKED
+                 saved_style_name = LabelStyle.STACKED.name
+            
+            # Find index
+            style_idx = -1
+            target_data = None
+            try:
+                target_data = LabelStyle[saved_style_name]
+                style_idx = self.labelStyleCombo.findData(target_data)
+            except KeyError:
+                pass
+            
+            if style_idx >= 0:
+                self.labelStyleCombo.setCurrentIndex(style_idx)
+            else:
+                # Absolute fallback
+                fallback_idx = self.labelStyleCombo.findData(LabelStyle.STACKED)
+                if fallback_idx >= 0:
+                    self.labelStyleCombo.setCurrentIndex(fallback_idx)
 
             self.labelFormatEdit.setText(
                 self.configuration.get_setting('label_format', '{length:.0f}-{diameter:.0f}-{slope:.5f}')
@@ -564,8 +690,46 @@ class MainExportDialog(QDialog, FORM_CLASS):
             self._save_configuration()
             # Signal that export was requested
             config_dict = self.configuration._export_config_to_dict(config)
-            self.export_requested.emit(config_dict)
-            super().accept()
+        self.export_requested.emit(config_dict)
+        super().accept()
+
+    def _try_auto_configure_pipes(self, layer):
+        """Try to auto-configure pipes mapping using AttributeMapper."""
+        if not layer:
+            return
+
+        from ..core.data_structures import GeometryType
+
+        try:
+            # Use shared AttributeMapper logic
+            mapping = self.attribute_mapper.create_auto_mapping(layer, GeometryType.LINE)
+            
+            # Check if we have at least ANY valid mapping or default
+            if mapping.field_mappings or mapping.default_values:
+                self.pipes_mapping = mapping
+                print(f"DEBUG: Auto-configured pipes mapping for {layer.name()}")
+                
+        except Exception as e:
+            print(f"Auto-config error (pipes): {e}")
+
+    def _try_auto_configure_junctions(self, layer):
+        """Try to auto-configure junctions mapping using AttributeMapper."""
+        if not layer:
+            return
+
+        from ..core.data_structures import GeometryType
+
+        try:
+            # Use shared AttributeMapper logic
+            mapping = self.attribute_mapper.create_auto_mapping(layer, GeometryType.POINT)
+            
+            # Check if we have at least ANY valid mapping or default
+            if mapping.field_mappings or mapping.default_values:
+                self.junctions_mapping = mapping
+                print(f"DEBUG: Auto-configured junctions mapping for {layer.name()}")
+
+        except Exception as e:
+            print(f"Auto-config error (junctions): {e}")
     
     def reject(self):
         """Handle dialog rejection (Cancel button clicked)."""

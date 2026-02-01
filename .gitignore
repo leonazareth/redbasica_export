@@ -32,6 +32,7 @@ MANIFEST
 *~
 .kiro/
 .cursor/
+.agent/
 
 # OS
 .DS_Store

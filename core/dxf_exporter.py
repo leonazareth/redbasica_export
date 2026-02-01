@@ -53,7 +53,13 @@ class DXFExporter:
     COLOR_PIPE = (166, 166, 255)       # Light blue #a6a6ff
     COLOR_PIPE_NAME = (255, 97, 0)     # Orange #ff6100
     COLOR_DEPTH_LENGTH = (140, 140, 140)  # Darker Gray #8c8c8c
+    COLOR_DEPTH_LENGTH = (140, 140, 140)  # Darker Gray #8c8c8c
     COLOR_WHITE = (255, 255, 255)      # White for other labels
+    COLOR_RED = (255, 0, 0)            # Red for Tubo de Queda (TC)
+    COLOR_BLUE = (0, 0, 255)           # Blue for Degrau (D)
+    
+    # Dimensions
+    DROP_CIRCLE_RADIUS = 1.0           # Base radius for drop markers (scaled by config)
     
     @staticmethod
     def rgb_to_int(rgb_tuple):
@@ -224,8 +230,8 @@ class DXFExporter:
             # Get layer names
             pipes_layer_name = self.template_manager.get_layer_name('REDE', config.layer_prefix)
             labels_layer_name = self.template_manager.get_layer_name('NUMERO', config.layer_prefix)
-            text_layer_name = self.template_manager.get_layer_name('TEXTO', config.layer_prefix)
-            arrows_layer_name = self.template_manager.get_layer_name('SETA', config.layer_prefix)
+            text_layer_name = self.template_manager.get_layer_name('LEG_REDE', config.layer_prefix)
+            arrows_layer_name = self.template_manager.get_layer_name('SETA_FLUXO', config.layer_prefix)
             
             # Process each pipe feature
             for feature in pipes_layer.getFeatures():
@@ -274,6 +280,13 @@ class DXFExporter:
                     # Add flow arrow
                     if config.include_arrows:
                         self._add_flow_arrow(msp, start_point, end_point, arrows_layer_name, config.scale_factor)
+                        
+                    # Add Drop / Drop Pipe marker if present
+                    self._add_drop_marker(msp, start_point, end_point, pipe_data, arrows_layer_name, config.scale_factor)
+                    
+                    # Add Collector Depth Label (h_col_p2) if enabled
+                    if config.include_collector_depth:
+                        self._add_collector_depth_label(msp, start_point, end_point, pipe_data, text_layer_name, config.scale_factor)
                     
                     # Add extended entity data (XDATA)
                     self._add_pipe_xdata(msp, pipe_data)
@@ -315,7 +328,7 @@ class DXFExporter:
             # Get layer names
             junctions_layer_name = self.template_manager.get_layer_name('PV', config.layer_prefix)
             labels_layer_name = self.template_manager.get_layer_name('NUMPV', config.layer_prefix)
-            elevation_layer_name = self.template_manager.get_layer_name('TEXTOPVS', config.layer_prefix)
+            elevation_layer_name = self.template_manager.get_layer_name('LEG_PV', config.layer_prefix)
             
             # Process each junction feature
             for feature in junctions_layer.getFeatures():
@@ -955,6 +968,18 @@ class DXFExporter:
             diameter = f"Ø{d_val:.0f}"
             slope = f"{s_val:.4f} m/m" if config.include_slope_unit else f"{s_val:.4f}"
             
+            # Prepare Drop Info
+            drop_type = pipe_data.get('drop_type')
+            drop_height = pipe_data.get('drop_height')
+            drop_str = ""
+            if drop_type:
+                try:
+                    h_val = float(drop_height)
+                    height_str = f"{h_val:.2f}"
+                except:
+                    height_str = ""
+                drop_str = f"{drop_type} {height_str}".strip()
+            
             # Geometry
             angle = get_cad_angle(p1, p2)
             rotation = get_readable_rotation(angle)
@@ -983,6 +1008,9 @@ class DXFExporter:
                 
                 content_top = f"{c_name}{name} {c_adaptive}- {c_len}{length}"
                 content_btm = f"{c_adaptive}{diameter} {slope}"
+                
+                if drop_str:
+                    content_btm += f"\\P{c_adaptive}{drop_str}"
                 
                 # Offsets
                 # Top text: Anchor BottomCenter. Pos = Mid + padding * Up
@@ -1034,6 +1062,9 @@ class DXFExporter:
                 
                 # Content: Name(Red) \P Length(Gray) \P (Space) \P Diameter(Adaptive) \P Slope(Adaptive)
                 content = f"{c_name}{name}\\P{c_len}{length}\\P \\P{c_adaptive}{diameter}\\P{c_adaptive}{slope}"
+                
+                if drop_str:
+                    content += f"\\P{c_adaptive}{drop_str}"
                 
                 # Position = Geometric Midpoint (no offset)
                 pos_x = mid_x
@@ -1749,6 +1780,15 @@ class DXFExporter:
             else:
                 print(f"DEBUG: Skipping arrows - include_arrows is False")
                 
+            # Add Drop / Drop Pipe markers (even if arrows are disabled, though usually they go together)
+            # Uses the same layer prefix logic as arrows or specific layer
+            self._add_drop_marker(msp, line_coords[0], line_coords[-1], feature_data, f"{config.layer_prefix}SETA", config.scale_factor)
+            print(f"DEBUG: Called _add_drop_marker in recovery mode")
+
+            # Add Collector Depth Label (h_col_p2) if enabled
+            if config.include_collector_depth:
+                self._add_collector_depth_label(msp, line_coords[0], line_coords[-1], feature_data, f"{config.layer_prefix}TEXTO", config.scale_factor)
+                
         except GeometryError:
             raise  # Re-raise geometry errors
         except Exception as e:
@@ -1872,6 +1912,15 @@ class DXFExporter:
             data_label = config.label_format.format(
                 length=length, diameter=diameter, slope=slope
             )
+            
+            # Append Drop info if present
+            drop_type = feature_data.get('drop_type')
+            drop_height = feature_data.get('drop_height')
+            if drop_type:
+                # Format: "Type Height" e.g "D 0.05" or "TC 0.80"
+                height_str = f"{float(drop_height):.2f}" if drop_height is not None else ""
+                data_label += f" {drop_type} {height_str}".strip()
+            
             print(f"DEBUG: Formatted data label: '{data_label}'")
             
             print(f"DEBUG: Adding pipe data text: '{data_label}' to layer: {config.layer_prefix}TEXTO")
@@ -2000,6 +2049,223 @@ class DXFExporter:
                 ErrorSeverity.WARNING,
                 f"Failed to add flow arrows: {e}",
                 error_type="arrow_creation_failed"
+            )
+            
+    def _ensure_drop_marker_block(self, doc, block_name="RB_DROP_MARKER", n=16):
+        """
+        Create a filled circle marker block using only R12-safe primitives:
+        - Circle outline (CIRCLE)
+        - Filled area using a fan of SOLID triangles
+        All entities on layer '0' and color BYBLOCK (0).
+        """
+        if block_name in doc.blocks:
+            return
+
+        import math
+        # Create block
+        blk = doc.blocks.new(name=block_name)
+
+        r = 1.0
+
+        # Outline (always visible even if fill fails)
+        blk.add_circle((0, 0), radius=r, dxfattribs={"layer": "0", "color": 0})
+
+        # Fill: triangle fan from center
+        cx, cy = 0.0, 0.0
+        for i in range(n):
+            a1 = 2.0 * math.pi * i / n
+            a2 = 2.0 * math.pi * (i + 1) / n
+            p1 = (r * math.cos(a1), r * math.sin(a1))
+            p2 = (r * math.cos(a2), r * math.sin(a2))
+
+            # SOLID entity (3 or 4 points)
+            # For triangle: p1, p2, p3, p3 (repeat last point)
+            blk.add_solid(
+                [(cx, cy), p1, p2, p2],
+                dxfattribs={"layer": "0", "color": 0}
+            )
+        
+        print(f"DEBUG: Created robust drop marker block: {block_name}")
+
+    def _add_drop_marker(self, msp, start_point, end_point, feature_data: Dict[str, Any], layer_name: str, scale_factor: float):
+        """Add drop marker using robust block."""
+        try:
+            drop_type = feature_data.get('drop_type')
+            if not drop_type:
+                return
+
+            # Determine color
+            if drop_type.upper() in ['TC', 'TUBO DE QUEDA']:
+                color_rgb = self.COLOR_RED
+            else:
+                color_rgb = self.COLOR_BLUE
+            
+            aci_color = self.get_aci_color(color_rgb)
+            
+            # Access coordinates
+            from qgis.core import QgsPointXY
+            if hasattr(start_point, 'x'):
+                p1 = QgsPointXY(start_point.x(), start_point.y())
+            else:
+                p1 = QgsPointXY(start_point[0], start_point[1])
+                
+            if hasattr(end_point, 'x'):
+                p2 = QgsPointXY(end_point.x(), end_point.y())
+            else:
+                p2 = QgsPointXY(end_point[0], end_point[1])
+            
+            # Calculate position
+            import math
+            length = math.sqrt((p2.x() - p1.x())**2 + (p2.y() - p1.y())**2)
+            
+            # 1/3 rule for short pipes, otherwise 6m from end
+            if length <= 4.0:
+                dist_from_end = length / 3.0
+            else:
+                dist_from_end = 4.0
+                
+            # Calculate marker position (using vector from end to start)
+            marker_pos = self._point_along(p2, p1, dist_from_end)
+            
+            # --- BLOCK BASED IMPLEMENTATION ---
+            block_name = "RB_DROP_MARKER"
+            
+            # 1. Ensure Block Exists (Robust)
+            self._ensure_drop_marker_block(msp.doc, block_name=block_name)
+
+            # 2. Insert Block Reference
+            # Scale radius: DROP_CIRCLE_RADIUS * scale_factor / 2000
+            sc = scale_factor / 2000.0
+            scale = self.DROP_CIRCLE_RADIUS * sc
+            
+            msp.add_blockref(
+                block_name,
+                (marker_pos.x(), marker_pos.y(), 0),
+                dxfattribs={
+                    'xscale': scale,
+                    'yscale': scale,
+                    'rotation': 0,
+                    'layer': layer_name,
+                    'color': aci_color
+                }
+            )
+            
+            print(f"DEBUG: Added drop marker block ref ({drop_type}) at {marker_pos}")
+            
+        except Exception as e:
+            self.error_manager.record_error(
+                ErrorSeverity.WARNING,
+                f"Failed to add drop marker: {e}",
+                error_type="drop_marker_failed"
+            )
+            
+    def _add_collector_depth_label(self, msp, start_point, end_point, feature_data: Dict[str, Any], layer_name: str, scale_factor: float):
+        """
+        Add collector depth label (h_col_p2) near downstream node.
+        
+        Specs:
+        - Parallel to pipe
+        - Below the line
+        - 5m from downstream node
+        - Color: Gray (same as depth/length)
+        - Height: 0.6 * Node Text Height (Node Height is 2.0 * scale/1000) -> 1.2 * scale/1000
+        """
+        try:
+            depth_val = feature_data.get('downstream_depth')
+            if depth_val is None:
+                return
+                
+            # Format value
+            try:
+                text = f"{float(depth_val):.2f}"
+            except:
+                return
+
+            from qgis.core import QgsPointXY
+            import math
+            
+            # Access coordinates
+            if hasattr(start_point, 'x'):
+                p1 = QgsPointXY(start_point.x(), start_point.y())
+            else:
+                p1 = QgsPointXY(start_point[0], start_point[1])
+                
+            if hasattr(end_point, 'x'):
+                p2 = QgsPointXY(end_point.x(), end_point.y())
+            else:
+                p2 = QgsPointXY(end_point[0], end_point[1])
+            
+            # Calculate position: 5.0m from p2 towards p1
+            dist_from_end = 5.0
+            length = math.sqrt((p2.x() - p1.x())**2 + (p2.y() - p1.y())**2)
+            
+            if length < dist_from_end:
+                 # If pipe is too short, place at midpoint
+                 marker_pos = self._point_along(p2, p1, length / 2.0)
+            else:
+                 marker_pos = self._point_along(p2, p1, dist_from_end)
+            
+            # Calculate rotation
+            angle_rad = math.atan2(p2.y() - p1.y(), p2.x() - p1.x())
+            angle_deg = math.degrees(angle_rad)
+            
+            # Normalize for readability (same logic as pipe labels)
+            rotation = angle_deg
+            if 90 < rotation <= 270:
+                rotation -= 180
+            elif -270 < rotation <= -90:
+                rotation += 180
+                
+            # Offset "Below" the line
+            # "Below" depends on the reading direction.
+            # We want to move perpendicular to the text direction.
+            # Normal vector to text direction:
+            # If text is rotated R, Up is R+90. Below is R-90.
+            
+            rad_text = math.radians(rotation)
+            rad_below = rad_text - math.pi/2
+            
+            # Text Height: User requested 1.2 drawing units (approx 0.6mm at 1:2000)
+            # This is very small, but explicitly valid per user conversation.
+            text_height = 1.2
+            
+            # Offset distance: roughly 1.5 * text_height
+            offset_dist = 1.5 * text_height
+            
+            off_x = math.cos(rad_below) * offset_dist
+            off_y = math.sin(rad_below) * offset_dist
+            
+            final_x = marker_pos.x() + off_x
+            final_y = marker_pos.y() + off_y
+            
+            # Color: Gray
+            color_rgb = self.COLOR_DEPTH_LENGTH
+            aci_color = self.get_aci_color(color_rgb)
+            
+            # Add TEXT entity using explicit attributes for alignment
+            # For MIDDLE_CENTER: halign=1 (CENTER), valign=2 (MIDDLE)
+            # 'align_point' is used for aligned text, 'insert' is ignored for aligned text usually
+            msp.add_text(
+                text,
+                dxfattribs={
+                    'layer': layer_name,
+                    'height': text_height,
+                    'color': aci_color,
+                    'rotation': rotation,
+                    'style': self.template_manager.default_text_style,
+                    'halign': 1,  # CENTER
+                    'valign': 2,  # MIDDLE
+                    'align_point': (final_x, final_y)
+                }
+            )
+            
+            print(f"DEBUG: Added collector depth label '{text}' at {final_x}, {final_y} with height {text_height}")
+            
+        except Exception as e:
+            self.error_manager.record_error(
+                ErrorSeverity.WARNING,
+                f"Failed to add collector depth label: {e}",
+                error_type="label_creation_failed"
             )
     
     def _calculate_azimuth(self, pt1, pt2):

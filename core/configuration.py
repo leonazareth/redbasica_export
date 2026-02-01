@@ -615,6 +615,9 @@ class Configuration:
             'label_format': config.label_format,
             'export_mode': config.export_mode.name,
             'label_style': config.label_style.name,
+            'include_collector_depth': config.include_collector_depth,
+            'export_node_id': config.export_node_id,
+            'include_slope_unit': config.include_slope_unit,
         }
         
         # Always include pipes_mapping and junctions_mapping, even if None
@@ -663,6 +666,9 @@ class Configuration:
             label_format=config_dict.get('label_format', '{length:.0f}-{diameter:.0f}-{slope:.5f}'),
             export_mode=get_enum(ExportMode, config_dict.get('export_mode'), ExportMode.STANDARD),
             label_style=get_enum(LabelStyle, config_dict.get('label_style'), LabelStyle.COMPACT),
+            include_collector_depth=config_dict.get('include_collector_depth', True),
+            export_node_id=config_dict.get('export_node_id', False),
+            include_slope_unit=config_dict.get('include_slope_unit', False),
         )
         
         if 'pipes_mapping' in config_dict and config_dict['pipes_mapping'] is not None:
