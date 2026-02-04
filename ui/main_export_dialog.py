@@ -19,6 +19,7 @@ from qgis.core import (
     QgsProject, QgsVectorLayer, QgsWkbTypes, QgsMapLayerProxyModel
 )
 from qgis.gui import QgsMapLayerComboBox
+from .node_assignment_dialog import NodeAssignmentDialog
 
 from ..core.layer_manager import LayerManager
 from ..core.data_structures import GeometryType
@@ -126,6 +127,14 @@ class MainExportDialog(QDialog, FORM_CLASS):
         if layer_group and layer_group.layout():
              # Add to row 2
              layer_group.layout().setWidget(2, QFormLayout.SpanningRole, self.autoMapButton)
+
+        # Add "Get nodes info to pipes" Button Programmatically
+        self.getNodesInfoButton = QPushButton("Get nodes info to pipes")
+        self.getNodesInfoButton.setToolTip("Assign Node IDs, Depth, and Elevation to connected pipes")
+        
+        if layer_group and layer_group.layout():
+             # Add to row 3 (creates a new row)
+             layer_group.layout().setWidget(3, QFormLayout.SpanningRole, self.getNodesInfoButton)
     
     def _setup_collapsible_advanced_options(self):
         """Replace the static Advanced Options group with a collapsible one."""
@@ -263,6 +272,9 @@ class MainExportDialog(QDialog, FORM_CLASS):
         # Connect new Auto-Map button if created
         if hasattr(self, 'autoMapButton'):
             self.autoMapButton.clicked.connect(self._manual_auto_map_all)
+        
+        if hasattr(self, 'getNodesInfoButton'):
+            self.getNodesInfoButton.clicked.connect(self._open_node_id_selection_dialog)
 
     def _manual_auto_map_all(self):
         """Manually trigger auto-mapping for all layers."""
@@ -798,6 +810,244 @@ class MainExportDialog(QDialog, FORM_CLASS):
                 if progress_dialog.wasCanceled():
                     raise ExportError("Export cancelled by user")
             
+            # Perform export
+            success, message, stats = self.exporter.export_to_dxf(
+                config,
+                progress_callback=progress_callback
+            )
+            
+            if success:
+                self._show_success_message(f"Export successful!\n\nOutput: {config.output_path}\n{message}")
+                self.accept()
+            else:
+                raise ExportError(f"Export failed: {message}")
+                
+        except Exception as e:
+            error_msg = self.error_formatter.format_export_error("execution_failed", error=str(e))
+            self._show_error_message(error_msg)
+        finally:
+            if 'progress_dialog' in locals():
+                progress_dialog.close()
+
+    def _open_node_id_selection_dialog(self):
+        """Open dialog to select Node ID, Depth, and Elevation fields."""
+        pipes_layer = self.pipesLayerCombo.currentLayer()
+        junctions_layer = self.junctionsLayerCombo.currentLayer()
+
+        if not pipes_layer or not junctions_layer:
+            QMessageBox.warning(
+                self, "Missing Layers",
+                "Please select both Pipes and Junctions layers first."
+            )
+            return
+
+        # Get fields from junctions layer
+        fields = [f.name() for f in junctions_layer.fields()]
+        
+        # Custom Dialog for multiple field selection
+        dialog = NodeAssignmentDialog(fields, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            node_id_field, depth_field, ground_elev_field, invert_elev_field = dialog.get_selected_fields()
+            self._execute_node_assignment(node_id_field, depth_field, ground_elev_field, invert_elev_field)
+
+    def _execute_node_assignment(self, node_id_field, depth_field=None, ground_elev_field=None, invert_elev_field=None):
+        """
+        Execute the spatial assignment of Node attributes to pipes.
+        
+        Args:
+            node_id_field (str): Name of the ID field in junctions layer
+            depth_field (str): Name of depth field (optional)
+            ground_elev_field (str): Name of ground elevation (CT) field (optional)
+            invert_elev_field (str): Name of invert elevation (CF) field (optional)
+        """
+        pipes_layer = self.pipesLayerCombo.currentLayer()
+        junctions_layer = self.junctionsLayerCombo.currentLayer()
+        
+        if not pipes_layer.isEditable():
+            pipes_layer.startEditing()
+            
+        try:
+            from qgis.core import QgsSpatialIndex, QgsField, NULL
+            from qgis.PyQt.QtCore import QVariant, QCoreApplication
+            from qgis.PyQt.QtWidgets import QProgressBar
+            from qgis.core import Qgis
+            from qgis.utils import iface
+
+            # Create progress widget (MessageBar best practice)
+            progressMessage = iface.messageBar().createMessage("Assigning Node IDs...")
+            progressBar = QProgressBar()
+            progressBar.setMaximum(pipes_layer.featureCount())
+            progressBar.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
+            progressMessage.layout().addWidget(progressBar)
+            iface.messageBar().pushWidget(progressMessage, Qgis.Info)
+
+            # Ensure fields exist
+            fields_to_add = []
+            
+            # Map of fields to create -> Type
+            # New naming: node_up_* (upstream/montante) and node_down_* (downstream/jusante)
+            new_fields = {
+                'node_up_id': QVariant.String,
+                'node_down_id': QVariant.String,
+                'node_up_depth': QVariant.Double,      # Profundidade (h) do nó montante
+                'node_down_depth': QVariant.Double,    # Profundidade (h) do nó jusante
+                'node_up_ground_elev': QVariant.Double,    # Cota do terreno (CT) montante
+                'node_down_ground_elev': QVariant.Double,  # Cota do terreno (CT) jusante
+                'node_up_invert_elev': QVariant.Double,    # Cota de fundo (CF) montante
+                'node_down_invert_elev': QVariant.Double   # Cota de fundo (CF) jusante
+            }
+            
+            for field_name, field_type in new_fields.items():
+                if pipes_layer.fields().indexFromName(field_name) == -1:
+                    fields_to_add.append(QgsField(field_name, field_type))
+                
+            if fields_to_add:
+                pipes_layer.dataProvider().addAttributes(fields_to_add)
+                pipes_layer.updateFields()
+
+            # Get field indices
+            idx_map = {
+                'node_up_id': pipes_layer.fields().indexFromName('node_up_id'),
+                'node_down_id': pipes_layer.fields().indexFromName('node_down_id'),
+                'node_up_depth': pipes_layer.fields().indexFromName('node_up_depth'),
+                'node_down_depth': pipes_layer.fields().indexFromName('node_down_depth'),
+                'node_up_ground_elev': pipes_layer.fields().indexFromName('node_up_ground_elev'),
+                'node_down_ground_elev': pipes_layer.fields().indexFromName('node_down_ground_elev'),
+                'node_up_invert_elev': pipes_layer.fields().indexFromName('node_up_invert_elev'),
+                'node_down_invert_elev': pipes_layer.fields().indexFromName('node_down_invert_elev')
+            }
+
+            # Build Spatial Index
+            index = QgsSpatialIndex(junctions_layer.getFeatures())
+            
+            # Cache junction attributes map {feature_id: {field: value}}
+            # This avoids re-querying the layer constantly
+            junction_cache = {}
+            for j_feat in junctions_layer.getFeatures():
+                data = {'id': j_feat[node_id_field]}
+                if depth_field:
+                    data['depth'] = j_feat[depth_field]
+                if ground_elev_field:
+                    data['ground_elev'] = j_feat[ground_elev_field]
+                if invert_elev_field:
+                    data['invert_elev'] = j_feat[invert_elev_field]
+                junction_cache[j_feat.id()] = data
+
+            count = 0
+            assignments = 0
+            pipes_with_issues = 0
+            
+            for p_feat in pipes_layer.getFeatures():
+                progressBar.setValue(count)
+                QCoreApplication.processEvents() # Needed for UI updates since we dominate the main thread
+                    
+                geom = p_feat.geometry()
+                if not geom or geom.isEmpty():
+                    count += 1
+                    continue
+                    
+                # Get start and end points
+                if geom.isMultipart():
+                    points = geom.asMultiPolyline()[0]
+                else:
+                    points = geom.asPolyline()
+                    
+                start_pt = points[0]
+                end_pt = points[-1]
+                
+                has_missing_node = False
+                
+                # Search Upstream (Start Point)
+                upstream_ids = index.nearestNeighbor(start_pt, 1)
+                found_upstream = False
+                if upstream_ids:
+                    u_feat_id = upstream_ids[0]
+                    u_data = junction_cache.get(u_feat_id, {})
+                    
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_id'], u_data.get('id', NULL))
+                    if depth_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_depth'], u_data.get('depth', NULL))
+                    if ground_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_ground_elev'], u_data.get('ground_elev', NULL))
+                    if invert_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_invert_elev'], u_data.get('invert_elev', NULL))
+                        
+                    found_upstream = True
+                else:
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_id'], NULL)
+                    # Clear other fields if no node found
+                    if depth_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_depth'], NULL)
+                    if ground_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_ground_elev'], NULL)
+                    if invert_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_up_invert_elev'], NULL)
+                    has_missing_node = True
+
+                # Search Downstream (End Point)
+                downstream_ids = index.nearestNeighbor(end_pt, 1)
+                found_downstream = False
+                if downstream_ids:
+                    d_feat_id = downstream_ids[0]
+                    d_data = junction_cache.get(d_feat_id, {})
+                    
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_id'], d_data.get('id', NULL))
+                    if depth_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_depth'], d_data.get('depth', NULL))
+                    if ground_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_ground_elev'], d_data.get('ground_elev', NULL))
+                    if invert_elev_field:
+                        pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_invert_elev'], d_data.get('invert_elev', NULL))
+                        
+                    found_downstream = True
+                else:
+                    pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_id'], NULL)
+                    if depth_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_depth'], NULL)
+                    if ground_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_ground_elev'], NULL)
+                    if invert_elev_field: pipes_layer.changeAttributeValue(p_feat.id(), idx_map['node_down_invert_elev'], NULL)
+                    has_missing_node = True
+                
+                if found_upstream and found_downstream:
+                    assignments += 1
+                
+                if has_missing_node:
+                    pipes_with_issues += 1
+
+                count += 1
+                
+            # Clear progress widget
+            iface.messageBar().popWidget(progressMessage)
+
+            # Atomic Save
+            if pipes_layer.commitChanges():
+                if pipes_with_issues == 0:
+                    iface.messageBar().pushMessage(
+                        "Node Assignment Success",
+                        f"All {assignments} pipes were successfully connected to upstream and downstream nodes.",
+                        level=Qgis.Success, duration=5
+                    )
+                else:
+                    iface.messageBar().pushMessage(
+                        "Node Assignment Warning",
+                        f"Assigned IDs to {assignments} fully connected pipes. <br><b>Warning:</b> {pipes_with_issues} pipes have missing start or end nodes (NULL values). Check topology.",
+                        level=Qgis.Warning, duration=10
+                    )
+            else:
+                iface.messageBar().pushMessage(
+                    "Save Error",
+                    f"Failed to save changes: {pipes_layer.commitErrors()}",
+                    level=Qgis.Critical, duration=10
+                )
+                
+        except Exception as e:
+            pipes_layer.rollBack()
+            # Clear progress widget if it exists
+            if 'progressMessage' in locals():
+                iface.messageBar().popWidget(progressMessage)
+                
+            iface.messageBar().pushMessage(
+                "Execution Error",
+                f"An error occurred: {str(e)}",
+                level=Qgis.Critical, duration=10
+            )
+            QgsMessageLog.logMessage(str(e), "RedBasica Export", Qgis.Critical)
             # Create exporter and execute
             exporter = DXFExporter(progress_callback=progress_callback)
             success, message, statistics = exporter.export_with_error_handling(config)
